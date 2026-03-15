@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude
+        domain="sharedpref"
+        path="dydownloader_prefs.xml" />
+    <exclude
+        domain="database"
+        path="dydownloader_db" />
+    <exclude
+        domain="database"
+        path="dydownloader_db-shm" />
+    <exclude
+        domain="database"
+        path="dydownloader_db-wal" />
+</full-backup-content>
