@@ -1,0 +1,5 @@
+Initial F-Droid-ready release
+
+- Download watermark-free Douyin photos, galleries, and videos
+- Parse post, profile, and collection links
+- Preview downloaded media and manage download history

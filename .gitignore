@@ -18,6 +18,7 @@
 local.properties
 hs_err_pid*.log
 app/build/
+app/release/
 app/.settings/
 app/.project
 app/.classpath

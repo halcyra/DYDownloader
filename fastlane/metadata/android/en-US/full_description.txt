@@ -1,0 +1,17 @@
+DYDownloader downloads watermark-free media from Douyin share links.
+
+It supports single posts, creator profiles, and collections, with support for photos, galleries, live photos, covers, and videos.
+
+Features:
+- Local parsing plus official Douyin interfaces
+- No third-party relay or parsing service
+- Batch download support for profiles and collections
+- Local download history and media preview
+- Optional login via the built-in WebView when a Douyin cookie is required
+
+Notes:
+- Some content requires a valid Douyin cookie provided by the user.
+- Cookies stay on the device and are only attached to requests sent to Douyin.
+- The app depends on Douyin, which is a proprietary network service.
+
+Use this app only in ways that comply with local law, platform rules, and copyright requirements.
