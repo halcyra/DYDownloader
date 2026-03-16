@@ -1,0 +1,5 @@
+F-Droid 提交准备版本
+
+- 将图片缩放依赖切换为 Maven Central 版本
+- 补充商店展示所需的 Fastlane 元数据与截图
+- 增加 Gradle Wrapper 校验和并忽略本地导出的 release 产物

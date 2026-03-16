@@ -1,0 +1,5 @@
+F-Droid submission prep release
+
+- Replace the image zoom dependency with a Maven Central build
+- Add Fastlane metadata and screenshots for app store listings
+- Add Gradle wrapper checksum and ignore exported local release artifacts
