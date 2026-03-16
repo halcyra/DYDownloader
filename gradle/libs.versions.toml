@@ -13,7 +13,7 @@ okhttp = "4.12.0"
 jackson = "2.17.2"
 room = "2.6.1"
 picasso = "2.8"
-photoview = "2.3.0"
+photoview = "1.0.3"
 
 [libraries]
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
@@ -33,7 +33,7 @@ activity = { group = "androidx.activity", name = "activity", version.ref = "acti
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 viewpager2 = { group = "androidx.viewpager2", name = "viewpager2", version.ref = "viewpager2" }
 picasso = { group = "com.squareup.picasso", name = "picasso", version.ref = "picasso" }
-photoview = { group = "com.github.chrisbanes", name = "PhotoView", version.ref = "photoview" }
+photoview = { group = "io.getstream", name = "photoview", version.ref = "photoview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
