@@ -23,10 +23,6 @@ Some parsing and download flows require Cookies.
 - Cookie data is stored locally on the device only and attached only when requesting Douyin.
 - Cookies are not uploaded to any third-party platform or service
 
-## Preview
-
-![DYDownloader Screenshot](assets/Screenshot_2026-03-15-23-54-23-18_965812c8f48220ffde2a6cc49890d021-2.jpg)
-
 ## Disclaimer
 
 - This project is provided for learning, research, and lawful personal use only
