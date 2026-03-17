@@ -7,6 +7,7 @@ import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.regex.Pattern;
@@ -23,13 +24,21 @@ public final class AppPrefs {
   public static final String KEY_HOME_FILTER = "home_filter";
   private static final String TAG = "AppPrefs";
   private static final String KEY_COOKIE_ENCRYPTED = "cookie_encrypted";
+  private static final String KEY_TIKTOK_COOKIE = "cookie_tiktok";
+  private static final String KEY_TIKTOK_COOKIE_ENCRYPTED = "cookie_tiktok_encrypted";
   private static final String COOKIE_KEYSTORE = "AndroidKeyStore";
   private static final String COOKIE_KEY_ALIAS = "dydownloader_cookie_key";
   private static final String COOKIE_CIPHER = "AES/GCM/NoPadding";
   private static final String COOKIE_VALUE_PREFIX = "v1";
-  private static final String[] COOKIE_LOGIN_FIELDS = {"sessionid", "sessionid_ss", "sid_guard"};
-  private static final String[] COOKIE_REQUEST_FIELDS = {
+  private static final String[] DOUYIN_COOKIE_LOGIN_FIELDS = {
+    "sessionid", "sessionid_ss", "sid_guard"
+  };
+  private static final String[] DOUYIN_COOKIE_REQUEST_FIELDS = {
     "msToken", "UIFID", "uifid", "passport_csrf_token"
+  };
+  private static final String[] TIKTOK_COOKIE_LOGIN_FIELDS = {"sessionid_ss", "sessionid"};
+  private static final String[] TIKTOK_COOKIE_REQUEST_FIELDS = {
+    "msToken", "ttwid", "tt_chain_token"
   };
 
   private AppPrefs() {}
@@ -39,72 +48,103 @@ public final class AppPrefs {
   }
 
   public static String getCookie(Context context) {
+    return getCookie(context, Platform.DOUYIN);
+  }
+
+  public static String getCookie(Context context, Platform platform) {
     SharedPreferences sharedPreferences = prefs(context);
-    String encryptedCookie = sharedPreferences.getString(KEY_COOKIE_ENCRYPTED, "");
+    String encryptedCookie = sharedPreferences.getString(encryptedCookieKey(platform), "");
     if (!encryptedCookie.isBlank()) {
       String decryptedCookie = decryptCookie(encryptedCookie);
-      if (isConfiguredCookieValue(decryptedCookie)) {
+      if (isConfiguredCookieValue(platform, decryptedCookie)) {
         return normalizeCookie(decryptedCookie);
       }
-      sharedPreferences.edit().remove(KEY_COOKIE_ENCRYPTED).remove(KEY_COOKIE).apply();
+      sharedPreferences
+          .edit()
+          .remove(encryptedCookieKey(platform))
+          .remove(cookieStorageKey(platform))
+          .apply();
       return "";
     }
 
-    String legacyCookie = sharedPreferences.getString(KEY_COOKIE, "");
-    if (!isConfiguredCookieValue(legacyCookie)) {
+    String legacyCookie = sharedPreferences.getString(cookieStorageKey(platform), "");
+    if (!isConfiguredCookieValue(platform, legacyCookie)) {
       if (!legacyCookie.isBlank()) {
-        sharedPreferences.edit().remove(KEY_COOKIE).apply();
+        sharedPreferences.edit().remove(cookieStorageKey(platform)).apply();
       }
       return "";
     }
 
     String normalizedCookie = normalizeCookie(legacyCookie);
-    setCookie(context, normalizedCookie);
+    setCookie(context, platform, normalizedCookie);
     return normalizedCookie;
   }
 
   public static void setCookie(Context context, String cookie) {
+    setCookie(context, Platform.DOUYIN, cookie);
+  }
+
+  public static void setCookie(Context context, Platform platform, String cookie) {
     SharedPreferences.Editor editor = prefs(context).edit();
     String normalizedCookie = normalizeCookie(cookie);
-    if (!isConfiguredCookieValue(normalizedCookie)) {
-      editor.remove(KEY_COOKIE).remove(KEY_COOKIE_ENCRYPTED).apply();
+    if (!isConfiguredCookieValue(platform, normalizedCookie)) {
+      editor.remove(cookieStorageKey(platform)).remove(encryptedCookieKey(platform)).apply();
       return;
     }
 
     String encryptedCookie = encryptCookie(normalizedCookie);
     if (encryptedCookie.isBlank()) {
       Log.w(TAG, "Failed to encrypt cookie, clearing stored value");
-      editor.remove(KEY_COOKIE).remove(KEY_COOKIE_ENCRYPTED).apply();
+      editor.remove(cookieStorageKey(platform)).remove(encryptedCookieKey(platform)).apply();
       return;
     }
 
-    editor.putString(KEY_COOKIE_ENCRYPTED, encryptedCookie).remove(KEY_COOKIE).apply();
+    editor.putString(encryptedCookieKey(platform), encryptedCookie)
+        .remove(cookieStorageKey(platform))
+        .apply();
   }
 
   public static boolean hasConfiguredCookie(Context context) {
-    return isConfiguredCookieValue(getCookie(context));
+    return hasConfiguredCookie(context, Platform.DOUYIN);
+  }
+
+  public static boolean hasConfiguredCookie(Context context, Platform platform) {
+    return isConfiguredCookieValue(platform, getCookie(context, platform));
   }
 
   public static boolean hasAuthenticatedCookie(Context context) {
-    return hasAuthenticatedCookieValue(getCookie(context));
+    return hasAuthenticatedCookie(context, Platform.DOUYIN);
+  }
+
+  public static boolean hasAuthenticatedCookie(Context context, Platform platform) {
+    return hasAuthenticatedCookieValue(platform, getCookie(context, platform));
   }
 
   public static boolean isConfiguredCookieValue(String cookie) {
+    return isConfiguredCookieValue(Platform.DOUYIN, cookie);
+  }
+
+  public static boolean isConfiguredCookieValue(Platform platform, String cookie) {
     String normalizedCookie = normalizeCookie(cookie);
     if (normalizedCookie.isBlank()) {
       return false;
     }
-    boolean hasAuthField = hasAuthenticatedCookieValue(normalizedCookie);
-    boolean hasRequestField = hasAnyCookieField(normalizedCookie, COOKIE_REQUEST_FIELDS);
+    boolean hasAuthField = hasAuthenticatedCookieValue(platform, normalizedCookie);
+    boolean hasRequestField =
+        hasAnyCookieField(normalizedCookie, cookieRequestFields(platform));
     return hasAuthField || hasRequestField;
   }
 
   public static boolean hasAuthenticatedCookieValue(String cookie) {
+    return hasAuthenticatedCookieValue(Platform.DOUYIN, cookie);
+  }
+
+  public static boolean hasAuthenticatedCookieValue(Platform platform, String cookie) {
     String normalizedCookie = normalizeCookie(cookie);
     if (normalizedCookie.isBlank()) {
       return false;
     }
-    return hasAnyCookieField(normalizedCookie, COOKIE_LOGIN_FIELDS);
+    return hasAnyCookieField(normalizedCookie, cookieLoginFields(platform));
   }
 
   public static String getLanguageTag(Context context) {
@@ -153,6 +193,24 @@ public final class AppPrefs {
 
   private static String normalizeCookie(String cookie) {
     return cookie == null ? "" : cookie.trim();
+  }
+
+  static String cookieStorageKey(Platform platform) {
+    return platform == Platform.TIKTOK ? KEY_TIKTOK_COOKIE : KEY_COOKIE;
+  }
+
+  private static String encryptedCookieKey(Platform platform) {
+    return platform == Platform.TIKTOK ? KEY_TIKTOK_COOKIE_ENCRYPTED : KEY_COOKIE_ENCRYPTED;
+  }
+
+  private static String[] cookieLoginFields(Platform platform) {
+    return platform == Platform.TIKTOK ? TIKTOK_COOKIE_LOGIN_FIELDS : DOUYIN_COOKIE_LOGIN_FIELDS;
+  }
+
+  private static String[] cookieRequestFields(Platform platform) {
+    return platform == Platform.TIKTOK
+        ? TIKTOK_COOKIE_REQUEST_FIELDS
+        : DOUYIN_COOKIE_REQUEST_FIELDS;
   }
 
   private static boolean hasAnyCookieField(String cookie, String[] names) {

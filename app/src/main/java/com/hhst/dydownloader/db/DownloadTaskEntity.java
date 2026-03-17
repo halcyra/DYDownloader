@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hhst.dydownloader.manager.DownloadTask;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.util.List;
 
@@ -15,6 +16,7 @@ public class DownloadTaskEntity {
   private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
   @PrimaryKey @NonNull public String taskKey = "";
+  @NonNull public Platform platform = Platform.DOUYIN;
 
   public Long resourceId;
   public long parentId;
@@ -38,6 +40,7 @@ public class DownloadTaskEntity {
     ResourceItem item = task.getResourceItem();
     DownloadTaskEntity entity = new DownloadTaskEntity();
     entity.taskKey = task.getKey();
+    entity.platform = item.platform();
     entity.resourceId = item.id();
     entity.parentId = item.parentId() == null ? 0L : item.parentId();
     entity.imageResId = item.imageResId();
@@ -80,6 +83,7 @@ public class DownloadTaskEntity {
   public DownloadTask toTask() {
     ResourceItem item =
         new ResourceItem(
+            platform,
             resourceId,
             parentId,
             imageResId,

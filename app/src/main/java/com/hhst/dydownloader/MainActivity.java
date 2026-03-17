@@ -22,8 +22,8 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
-import com.hhst.dydownloader.douyin.DouyinDownloader;
 import com.hhst.dydownloader.manager.DownloadQueue;
+import com.hhst.dydownloader.share.ShareLinkResolver;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -73,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
               }
               String text = clipText.toString().trim();
-              if (!looksLikeDouyinLink(text)) {
+              if (!looksLikeSupportedLink(text)) {
                 hideClipboardPrompt();
                 return;
               }
@@ -192,8 +192,8 @@ public class MainActivity extends AppCompatActivity {
                 urlInput.setError(getString(R.string.hint_enter_url));
                 return;
               }
-              if (!looksLikeDouyinLink(text)) {
-                urlInput.setError(getString(R.string.invalid_douyin_link));
+              if (!looksLikeSupportedLink(text)) {
+                urlInput.setError(getString(R.string.invalid_supported_link));
                 return;
               }
               dialog.dismiss();
@@ -215,14 +215,14 @@ public class MainActivity extends AppCompatActivity {
     if (text.isEmpty()) {
       return;
     }
-    if (!looksLikeDouyinLink(text)) {
+    if (!looksLikeSupportedLink(text)) {
       return;
     }
     showClipboardPrompt();
   }
 
-  private boolean looksLikeDouyinLink(String text) {
-    return DouyinDownloader.containsDouyinLink(text);
+  private boolean looksLikeSupportedLink(String text) {
+    return ShareLinkResolver.containsSupportedLink(text);
   }
 
   private void openResourceFromShareText(String text) {

@@ -35,6 +35,8 @@
     <string name="language_option_zh_tw">繁體中文</string>
     <string name="clear_cache">Clear Cache</string>
     <string name="cookies">Cookies</string>
+    <string name="cookies_platform_douyin">Douyin</string>
+    <string name="cookies_platform_tiktok">TikTok</string>
     <string name="retry">Retry</string>
     <string name="dialog_batch_delete_title">Batch Delete</string>
     <string name="dialog_detail_title">Detail</string>
@@ -42,7 +44,7 @@
     <string name="dialog_ok">OK</string>
     <string name="dialog_delete_single_message">Delete this item?</string>
     <string name="dialog_delete_local_files">Delete local files too</string>
-    <string name="invalid_douyin_link">No Douyin link found</string>
+    <string name="invalid_supported_link">No supported link found</string>
     <string name="clipboard_link_detected">Clipboard link detected</string>
     <string name="press_back_again_to_exit">Press back again to exit</string>
     <string name="clear_cache_confirm">Clear all cache?</string>

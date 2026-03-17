@@ -3,24 +3,12 @@ package com.hhst.dydownloader;
 import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import com.hhst.dydownloader.model.Platform;
 import org.apache.commons.io.FileUtils;
 
 public class SettingsActivity extends AppCompatActivity {
-
-  private final ActivityResultLauncher<Intent> cookieLauncher =
-      registerForActivityResult(
-          new ActivityResultContracts.StartActivityForResult(),
-          result -> {
-            if (result.getResultCode() == RESULT_OK && result.getData() != null) {
-              String cookie = result.getData().getStringExtra(CookieWebViewActivity.EXTRA_COOKIE);
-              AppPrefs.setCookie(this, cookie == null ? "" : cookie);
-              updateCookieStatus();
-            }
-          });
   private TextView currentLanguage, cacheText, cookieStatus;
 
   @Override
@@ -59,8 +47,8 @@ public class SettingsActivity extends AppCompatActivity {
     findViewById(R.id.layoutCookies)
         .setOnClickListener(
             v -> {
-              Intent intent = new Intent(this, CookieWebViewActivity.class);
-              cookieLauncher.launch(intent);
+              Intent intent = new Intent(this, CookiesActivity.class);
+              startActivity(intent);
             });
 
     updateCacheSize();
@@ -133,12 +121,16 @@ public class SettingsActivity extends AppCompatActivity {
     if (cookieStatus == null) {
       return;
     }
+    boolean hasAuthenticated =
+        AppPrefs.hasAuthenticatedCookie(this, Platform.DOUYIN)
+            || AppPrefs.hasAuthenticatedCookie(this, Platform.TIKTOK);
+    boolean hasConfigured =
+        AppPrefs.hasConfiguredCookie(this, Platform.DOUYIN)
+            || AppPrefs.hasConfiguredCookie(this, Platform.TIKTOK);
     int statusResId =
-        AppPrefs.hasAuthenticatedCookie(this)
+        hasAuthenticated
             ? R.string.settings_status_set
-            : AppPrefs.hasConfiguredCookie(this)
-                ? R.string.settings_status_request_only
-                : R.string.settings_status_unset;
+            : hasConfigured ? R.string.settings_status_request_only : R.string.settings_status_unset;
     cookieStatus.setText(statusResId);
   }
 }

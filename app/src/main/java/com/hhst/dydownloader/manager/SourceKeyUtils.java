@@ -1,6 +1,8 @@
 package com.hhst.dydownloader.manager;
 
 public final class SourceKeyUtils {
+  private static final String DOUYIN_PREFIX = "DOUYIN:";
+  private static final String TIKTOK_PREFIX = "TIKTOK:";
   private static final String PHOTO_MARKER = "#photo:";
   private static final String LIVE_MARKER = "#live:";
 
@@ -11,12 +13,14 @@ public final class SourceKeyUtils {
   }
 
   public static String baseOf(String key) {
-    String normalized = normalize(key);
+    String normalized = rawSourceKey(key);
     if (normalized.isEmpty()) {
       return "";
     }
     int hashIndex = normalized.indexOf('#');
-    return hashIndex >= 0 ? normalized.substring(0, hashIndex) : normalized;
+    String base = hashIndex >= 0 ? normalized.substring(0, hashIndex) : normalized;
+    String prefix = platformPrefix(key);
+    return prefix.isEmpty() ? base : prefix + base;
   }
 
   public static boolean isSameResource(String leftKey, String rightKey) {
@@ -27,6 +31,11 @@ public final class SourceKeyUtils {
     }
     if (left.equals(right)) {
       return true;
+    }
+    String leftPlatform = platformPrefix(left);
+    String rightPlatform = platformPrefix(right);
+    if (!leftPlatform.isEmpty() && !rightPlatform.isEmpty() && !leftPlatform.equals(rightPlatform)) {
+      return false;
     }
     String leftBase = baseOf(left);
     String rightBase = baseOf(right);
@@ -54,7 +63,7 @@ public final class SourceKeyUtils {
   }
 
   public static int markerIndex(String sourceKey, String marker) {
-    String normalizedSource = normalize(sourceKey);
+    String normalizedSource = rawSourceKey(sourceKey);
     String normalizedMarker = normalize(marker);
     if (normalizedSource.isEmpty() || normalizedMarker.isEmpty()) {
       return -1;
@@ -70,5 +79,27 @@ public final class SourceKeyUtils {
     } catch (NumberFormatException ignored) {
       return -1;
     }
+  }
+
+  public static String rawSourceKey(String key) {
+    String normalized = normalize(key);
+    if (normalized.startsWith(DOUYIN_PREFIX)) {
+      return normalized.substring(DOUYIN_PREFIX.length());
+    }
+    if (normalized.startsWith(TIKTOK_PREFIX)) {
+      return normalized.substring(TIKTOK_PREFIX.length());
+    }
+    return normalized;
+  }
+
+  public static String platformPrefix(String key) {
+    String normalized = normalize(key);
+    if (normalized.startsWith(DOUYIN_PREFIX)) {
+      return DOUYIN_PREFIX;
+    }
+    if (normalized.startsWith(TIKTOK_PREFIX)) {
+      return TIKTOK_PREFIX;
+    }
+    return "";
   }
 }

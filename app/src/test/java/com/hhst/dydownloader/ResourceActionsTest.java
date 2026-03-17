@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import com.hhst.dydownloader.db.ResourceDao;
 import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -211,7 +212,7 @@ public class ResourceActionsTest {
     void put(ResourceEntity entity) {
       entitiesById.put(entity.id, entity);
       if (entity.sourceKey != null) {
-        entitiesBySourceKey.put(entity.sourceKey, entity);
+        entitiesBySourceKey.put(qualifiedKey(entity.platform, entity.sourceKey), entity);
       }
     }
 
@@ -231,14 +232,19 @@ public class ResourceActionsTest {
     }
 
     @Override
-    public ResourceEntity getBySourceKey(String sourceKey) {
-      return entitiesBySourceKey.get(sourceKey);
+    public ResourceEntity getBySourceKey(Platform platform, String sourceKey) {
+      return entitiesBySourceKey.get(qualifiedKey(platform, sourceKey));
     }
 
     @Override
-    public ResourceEntity getByParentIdAndSourceKey(long parentId, String sourceKey) {
+    public ResourceEntity getByParentIdAndSourceKey(
+        long parentId, Platform platform, String sourceKey) {
       return entitiesById.values().stream()
-          .filter(item -> item.parentId == parentId && sourceKey.equals(item.sourceKey))
+          .filter(
+              item ->
+                  item.parentId == parentId
+                      && item.platform == platform
+                      && sourceKey.equals(item.sourceKey))
           .findFirst()
           .orElse(null);
     }
@@ -272,7 +278,7 @@ public class ResourceActionsTest {
     public void deleteById(long id) {
       ResourceEntity removed = entitiesById.remove(id);
       if (removed != null && removed.sourceKey != null) {
-        entitiesBySourceKey.remove(removed.sourceKey);
+        entitiesBySourceKey.remove(qualifiedKey(removed.platform, removed.sourceKey));
       }
     }
 
@@ -282,7 +288,7 @@ public class ResourceActionsTest {
           item -> {
             boolean shouldRemove = item.parentId == parentId;
             if (shouldRemove && item.sourceKey != null) {
-              entitiesBySourceKey.remove(item.sourceKey);
+              entitiesBySourceKey.remove(qualifiedKey(item.platform, item.sourceKey));
             }
             return shouldRemove;
           });
@@ -296,6 +302,10 @@ public class ResourceActionsTest {
 
     private UnsupportedOperationException unsupported() {
       return new UnsupportedOperationException("Not needed in this test");
+    }
+
+    private static String qualifiedKey(Platform platform, String sourceKey) {
+      return (platform == null ? Platform.DOUYIN : platform).name() + ":" + sourceKey;
     }
   }
 }

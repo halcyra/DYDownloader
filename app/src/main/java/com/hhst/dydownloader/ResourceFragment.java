@@ -24,7 +24,12 @@ import com.hhst.dydownloader.douyin.MediaType;
 import com.hhst.dydownloader.manager.DownloadQueue;
 import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
+import com.hhst.dydownloader.share.ResourceProbeRouter;
+import com.hhst.dydownloader.share.ShareLinkResolver;
+import com.hhst.dydownloader.share.ShareLinkResolver.LinkKind;
+import com.hhst.dydownloader.tiktok.TikTokDownloader;
 import com.hhst.dydownloader.util.MediaSourceUtils;
 import com.hhst.dydownloader.util.StoragePathUtils;
 import com.hhst.dydownloader.util.StorageReferenceUtils;
@@ -235,7 +240,6 @@ public class ResourceFragment extends Fragment
 
   private void startConcurrentLoading(String text) {
     loadingProgress.setVisibility(View.VISIBLE);
-    String cookie = AppPrefs.getCookie(requireContext());
     ExecutorService exec = loadExecutor;
     if (exec == null) {
       loadingProgress.setVisibility(View.GONE);
@@ -247,17 +251,14 @@ public class ResourceFragment extends Fragment
     }
 
     final int generation = ++loadGeneration;
-    DouyinDownloader downloader = new DouyinDownloader(cookie);
-
-    CompletableFuture<ProbeResult> accountFuture =
-        CompletableFuture.supplyAsync(() -> probeAccount(text, downloader), exec);
-    CompletableFuture<ProbeResult> mixFuture =
-        CompletableFuture.supplyAsync(() -> probeMix(text, downloader), exec);
-    CompletableFuture<ProbeResult> workFuture =
-        CompletableFuture.supplyAsync(() -> probeWork(text, downloader), exec);
-
+    ResourceProbeRouter.Plan probePlan = ResourceProbeRouter.plan(text);
+    if (!probePlan.supported()) {
+      showLoadFailed(generation, getString(R.string.invalid_supported_link));
+      return;
+    }
+    String cookie = AppPrefs.getCookie(requireContext(), probePlan.platform());
     List<CompletableFuture<ProbeResult>> probeFutures =
-        List.of(accountFuture, mixFuture, workFuture);
+        createProbeFutures(text, probePlan, cookie, exec);
     AtomicBoolean resolved = new AtomicBoolean(false);
     AtomicInteger completed = new AtomicInteger(0);
 
@@ -296,7 +297,37 @@ public class ResourceFragment extends Fragment
           exec);
     }
 
-    inFlightLoad = CompletableFuture.allOf(accountFuture, mixFuture, workFuture);
+    inFlightLoad = CompletableFuture.allOf(probeFutures.toArray(CompletableFuture[]::new));
+  }
+
+  private List<CompletableFuture<ProbeResult>> createProbeFutures(
+      String text, ResourceProbeRouter.Plan probePlan, String cookie, ExecutorService exec) {
+    if (probePlan.platform() == Platform.TIKTOK) {
+      TikTokDownloader downloader = new TikTokDownloader(cookie);
+      return probePlan.probeKinds().stream()
+          .map(kind -> CompletableFuture.supplyAsync(() -> probe(kind, text, downloader), exec))
+          .collect(Collectors.toList());
+    }
+    DouyinDownloader downloader = new DouyinDownloader(cookie);
+    return probePlan.probeKinds().stream()
+        .map(kind -> CompletableFuture.supplyAsync(() -> probe(kind, text, downloader), exec))
+        .collect(Collectors.toList());
+  }
+
+  private ProbeResult probe(LinkKind kind, String text, DouyinDownloader downloader) {
+    return switch (kind) {
+      case ACCOUNT -> probeAccount(text, downloader);
+      case MIX -> probeMix(text, downloader);
+      case WORK, UNKNOWN -> probeWork(text, downloader);
+    };
+  }
+
+  private ProbeResult probe(LinkKind kind, String text, TikTokDownloader downloader) {
+    return switch (kind) {
+      case ACCOUNT -> probeAccount(text, downloader);
+      case MIX -> probeMix(text, downloader);
+      case WORK, UNKNOWN -> probeWork(text, downloader);
+    };
   }
 
   private ProbeResult probeAccount(String text, DouyinDownloader downloader) {
@@ -329,6 +360,36 @@ public class ResourceFragment extends Fragment
     }
   }
 
+  private ProbeResult probeAccount(String text, TikTokDownloader downloader) {
+    try {
+      List<AwemeProfile> result = downloader.collectAccountWorksInfo(text);
+      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
+    } catch (Exception e) {
+      Log.d(TAG, "TikTok account probe failed for " + text, e);
+      return ProbeResult.empty(CardType.COLLECTION);
+    }
+  }
+
+  private ProbeResult probeMix(String text, TikTokDownloader downloader) {
+    try {
+      List<AwemeProfile> result = downloader.collectMixWorksInfo(text);
+      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
+    } catch (Exception e) {
+      Log.d(TAG, "TikTok mix probe failed for " + text, e);
+      return ProbeResult.empty(CardType.COLLECTION);
+    }
+  }
+
+  private ProbeResult probeWork(String text, TikTokDownloader downloader) {
+    try {
+      AwemeProfile result = downloader.collectWorkInfo(text);
+      return new ProbeResult(List.of(result), CardType.ALBUM);
+    } catch (Exception e) {
+      Log.d(TAG, "TikTok single work probe failed for " + text, e);
+      return ProbeResult.empty(CardType.ALBUM);
+    }
+  }
+
   private void cancelOtherProbes(
       List<CompletableFuture<ProbeResult>> probeFutures,
       CompletableFuture<ProbeResult> winnerFuture) {
@@ -352,7 +413,9 @@ public class ResourceFragment extends Fragment
         rootType = CardType.COLLECTION;
       }
       for (AwemeProfile profile : result.profiles()) {
-        if (profile != null && seenIds.add(profile.awemeId())) {
+        String profileKey =
+            profile == null ? "" : profile.platform().name() + ":" + profile.awemeId();
+        if (profile != null && seenIds.add(profileKey)) {
           merged.add(profile);
         }
       }
@@ -370,7 +433,8 @@ public class ResourceFragment extends Fragment
       if (profile == null) {
         continue;
       }
-      if (seenIds.add(profile.awemeId())) {
+      String profileKey = profile.platform().name() + ":" + profile.awemeId();
+      if (seenIds.add(profileKey)) {
         deduplicated.add(profile);
       }
     }
@@ -397,6 +461,7 @@ public class ResourceFragment extends Fragment
       boolean isLeaf = children.isEmpty();
       ResourceItem item =
           new ResourceItem(
+              profile.platform(),
               null,
               -1L,
               rootType.getIconResId(),
@@ -457,7 +522,7 @@ public class ResourceFragment extends Fragment
       String desc = allProfiles.get(0).desc();
       return desc != null && !desc.isEmpty() ? desc : getString(R.string.resource_work_detail);
     }
-    if (DouyinDownloader.isMixLink(shareLink)) {
+    if (resolveShareLinkKind() == LinkKind.MIX) {
       String collectionTitle = resolveCollectionTitle(allProfiles);
       if (!collectionTitle.isBlank()) {
         return collectionTitle;
@@ -470,13 +535,18 @@ public class ResourceFragment extends Fragment
   }
 
   private String resolveDownloadGroupDir(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    if (DouyinDownloader.isMixLink(shareLink)) {
+    LinkKind shareKind = resolveShareLinkKind();
+    if (shareKind == LinkKind.MIX) {
       return StoragePathUtils.joinSegments(resolveCollectionTitle(allProfiles, fallbackTitle));
     }
-    if (DouyinDownloader.isAccountLink(shareLink)) {
+    if (shareKind == LinkKind.ACCOUNT) {
       return StoragePathUtils.joinSegments(resolveAccountTitle(allProfiles, fallbackTitle));
     }
     return "";
+  }
+
+  private LinkKind resolveShareLinkKind() {
+    return ShareLinkResolver.resolve(shareLink).kind();
   }
 
   private String resolveCollectionTitle(List<AwemeProfile> allProfiles) {
@@ -715,6 +785,7 @@ public class ResourceFragment extends Fragment
   private ResourceItem createVideoItem(
       AwemeProfile profile, String parentTitle, String storageDir) {
     return new ResourceItem(
+        profile.platform(),
         null,
         -1L,
         CardType.VIDEO.getIconResId(),
@@ -738,6 +809,7 @@ public class ResourceFragment extends Fragment
     if (profile.thumbnailUrl() != null && !profile.thumbnailUrl().isBlank()) {
       videoItems.add(
           new ResourceItem(
+              profile.platform(),
               null,
               -1L,
               CardType.PHOTO.getIconResId(),
@@ -791,6 +863,7 @@ public class ResourceFragment extends Fragment
 
         photoItems.add(
             new ResourceItem(
+                profile.platform(),
                 null,
                 -1L,
                 CardType.PHOTO.getIconResId(),
@@ -809,6 +882,7 @@ public class ResourceFragment extends Fragment
 
         photoItems.add(
             new ResourceItem(
+                profile.platform(),
                 null,
                 -1L,
                 CardType.VIDEO.getIconResId(),
@@ -829,6 +903,7 @@ public class ResourceFragment extends Fragment
 
       photoItems.add(
           new ResourceItem(
+              profile.platform(),
               null,
               -1L,
               CardType.PHOTO.getIconResId(),
@@ -874,6 +949,7 @@ public class ResourceFragment extends Fragment
 
         photoItems.add(
             new ResourceItem(
+                parentItem.platform(),
                 null,
                 -1L,
                 CardType.PHOTO.getIconResId(),
@@ -892,6 +968,7 @@ public class ResourceFragment extends Fragment
 
         photoItems.add(
             new ResourceItem(
+                parentItem.platform(),
                 null,
                 -1L,
                 CardType.VIDEO.getIconResId(),
@@ -912,6 +989,7 @@ public class ResourceFragment extends Fragment
 
       photoItems.add(
           new ResourceItem(
+              parentItem.platform(),
               null,
               -1L,
               CardType.PHOTO.getIconResId(),
@@ -1016,6 +1094,7 @@ public class ResourceFragment extends Fragment
     }
     String relativeDir = resolveDownloadStorageDir(item);
     return new ResourceItem(
+        item.platform(),
         item.id(),
         item.parentId(),
         item.imageResId(),

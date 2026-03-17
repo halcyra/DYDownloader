@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record ResourceItem(
+    Platform platform,
     Long id,
     Long parentId,
     int imageResId,
@@ -21,12 +22,83 @@ public record ResourceItem(
     String storageDir) {
 
   public ResourceItem {
+    platform = platform == null ? Platform.DOUYIN : platform;
     thumbnailUrl = thumbnailUrl == null ? "" : thumbnailUrl;
     children = children == null ? null : new ArrayList<>(children);
     sourceKey = sourceKey == null ? "" : sourceKey;
     downloadUrls = downloadUrls == null ? List.of() : new ArrayList<>(downloadUrls);
     downloadPath = downloadPath == null ? "" : downloadPath;
     storageDir = storageDir == null ? "" : storageDir;
+  }
+
+  public ResourceItem(
+      Platform platform,
+      Long id,
+      Long parentId,
+      int imageResId,
+      String text,
+      CardType type,
+      long createTime,
+      int childrenNum,
+      boolean isLeaf,
+      String thumbnailUrl,
+      List<ResourceItem> children,
+      String sourceKey,
+      List<String> downloadUrls,
+      boolean imagePost,
+      String downloadPath) {
+    this(
+        platform,
+        id,
+        parentId,
+        imageResId,
+        text,
+        type,
+        createTime,
+        childrenNum,
+        isLeaf,
+        thumbnailUrl,
+        children,
+        sourceKey,
+        downloadUrls,
+        imagePost,
+        downloadPath,
+        "");
+  }
+
+  public ResourceItem(
+      Long id,
+      Long parentId,
+      int imageResId,
+      String text,
+      CardType type,
+      long createTime,
+      int childrenNum,
+      boolean isLeaf,
+      String thumbnailUrl,
+      List<ResourceItem> children,
+      String sourceKey,
+      List<String> downloadUrls,
+      boolean imagePost,
+      String downloadPath,
+      String storageDir) {
+    this(
+        Platform.DOUYIN,
+        id,
+        parentId,
+        imageResId,
+        text,
+        type,
+        createTime,
+        childrenNum,
+        isLeaf,
+        thumbnailUrl,
+        children,
+        sourceKey,
+        downloadUrls,
+        imagePost,
+        downloadPath,
+        storageDir);
   }
 
   public ResourceItem(
@@ -45,6 +117,7 @@ public record ResourceItem(
       boolean imagePost,
       String downloadPath) {
     this(
+        Platform.DOUYIN,
         id,
         parentId,
         imageResId,
@@ -70,6 +143,7 @@ public record ResourceItem(
       boolean isLeaf,
       List<ResourceItem> children) {
     this(
+        Platform.DOUYIN,
         null,
         0L,
         imageResId,
@@ -96,6 +170,7 @@ public record ResourceItem(
       String thumbnailUrl,
       List<ResourceItem> children) {
     this(
+        Platform.DOUYIN,
         null,
         0L,
         imageResId,
@@ -115,11 +190,11 @@ public record ResourceItem(
 
   public String key() {
     if (!sourceKey.isBlank()) {
-      return sourceKey;
+      return platform.name() + ":" + sourceKey;
     }
     if (id != null && id > 0) {
-      return "id:" + id;
+      return platform.name() + ":id:" + id;
     }
-    return type + ":" + parentId + ":" + text + ":" + createTime;
+    return platform.name() + ":" + type + ":" + parentId + ":" + text + ":" + createTime;
   }
 }

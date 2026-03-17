@@ -35,6 +35,8 @@
     <string name="language_option_zh_tw">繁體中文</string>
     <string name="clear_cache">清除缓存</string>
     <string name="cookies">Cookies</string>
+    <string name="cookies_platform_douyin">抖音</string>
+    <string name="cookies_platform_tiktok">TikTok</string>
     <string name="retry">重试</string>
     <string name="dialog_batch_delete_title">批量删除</string>
     <string name="dialog_detail_title">详情</string>
@@ -42,7 +44,7 @@
     <string name="dialog_ok">确定</string>
     <string name="dialog_delete_single_message">删除这项内容？</string>
     <string name="dialog_delete_local_files">同时删除本地文件</string>
-    <string name="invalid_douyin_link">未找到抖音链接</string>
+    <string name="invalid_supported_link">未找到支持的平台链接</string>
     <string name="clipboard_link_detected">检测到剪贴板链接</string>
     <string name="press_back_again_to_exit">再按一次返回键退出应用</string>
     <string name="clear_cache_confirm">确定清除所有缓存？</string>

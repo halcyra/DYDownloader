@@ -1,10 +1,12 @@
 package com.hhst.dydownloader.douyin;
 
+import com.hhst.dydownloader.model.Platform;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 
 public class AwemeProfile implements Serializable {
+  private final Platform platform;
   private final String awemeId;
   private final MediaType mediaType;
   private final String desc;
@@ -27,6 +29,7 @@ public class AwemeProfile implements Serializable {
       String thumbnailUrl,
       List<String> thumbnailUrls) {
     this(
+        Platform.DOUYIN,
         awemeId,
         mediaType,
         desc,
@@ -51,6 +54,7 @@ public class AwemeProfile implements Serializable {
       List<String> thumbnailUrls,
       List<String> downloadUrls) {
     this(
+        Platform.DOUYIN,
         awemeId,
         mediaType,
         desc,
@@ -65,6 +69,7 @@ public class AwemeProfile implements Serializable {
   }
 
   public AwemeProfile(
+      Platform platform,
       String awemeId,
       MediaType mediaType,
       String desc,
@@ -76,6 +81,7 @@ public class AwemeProfile implements Serializable {
       List<String> thumbnailUrls,
       List<String> downloadUrls,
       List<MediaType> imageMediaTypes) {
+    this.platform = platform == null ? Platform.DOUYIN : platform;
     this.awemeId = awemeId;
     this.mediaType = mediaType;
     this.desc = desc;
@@ -89,6 +95,37 @@ public class AwemeProfile implements Serializable {
     this.downloadUrls = downloadUrls == null ? Collections.emptyList() : List.copyOf(downloadUrls);
     this.imageMediaTypes =
         imageMediaTypes == null ? Collections.emptyList() : List.copyOf(imageMediaTypes);
+  }
+
+  public AwemeProfile(
+      String awemeId,
+      MediaType mediaType,
+      String desc,
+      long createTime,
+      String authorNickname,
+      String authorSecUserId,
+      String collectionTitle,
+      String thumbnailUrl,
+      List<String> thumbnailUrls,
+      List<String> downloadUrls,
+      List<MediaType> imageMediaTypes) {
+    this(
+        Platform.DOUYIN,
+        awemeId,
+        mediaType,
+        desc,
+        createTime,
+        authorNickname,
+        authorSecUserId,
+        collectionTitle,
+        thumbnailUrl,
+        thumbnailUrls,
+        downloadUrls,
+        imageMediaTypes);
+  }
+
+  public Platform platform() {
+    return platform;
   }
 
   public String awemeId() {
