@@ -10,6 +10,7 @@
 /.classpath
 /.claude/
 /.sisyphus/
+/.worktrees/
 .DS_Store
 /build
 /captures
