@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 
 @Database(
     entities = {ResourceEntity.class, DownloadTaskEntity.class},
-    version = 5,
+    version = 6,
     exportSchema = false)
 @TypeConverters({Converters.class})
 public abstract class AppDatabase extends RoomDatabase {
@@ -63,6 +63,16 @@ public abstract class AppDatabase extends RoomDatabase {
           database.execSQL("ALTER TABLE download_tasks ADD COLUMN storageDir TEXT");
         }
       };
+  private static final Migration MIGRATION_5_6 =
+      new Migration(5, 6) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+          database.execSQL(
+              "ALTER TABLE resources ADD COLUMN platform TEXT NOT NULL DEFAULT 'DOUYIN'");
+          database.execSQL(
+              "ALTER TABLE download_tasks ADD COLUMN platform TEXT NOT NULL DEFAULT 'DOUYIN'");
+        }
+      };
   private static volatile AppDatabase instance;
 
   public static AppDatabase getDatabase(final Context context) {
@@ -72,7 +82,8 @@ public abstract class AppDatabase extends RoomDatabase {
           instance =
               Room.databaseBuilder(
                       context.getApplicationContext(), AppDatabase.class, "dydownloader_db")
-                  .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                  .addMigrations(
+                      MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                   .build();
         }
       }

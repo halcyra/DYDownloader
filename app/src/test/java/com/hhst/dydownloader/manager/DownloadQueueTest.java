@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.hhst.dydownloader.db.DownloadTaskEntity;
 import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.ResourceItem;
@@ -50,6 +51,16 @@ public class DownloadQueueTest {
         DownloadQueue.matchesAnyExactResourceKey("TIKTOK:aweme-1234567890#photo:2", targets));
     assertFalse(
         DownloadQueue.matchesAnyExactResourceKey("DOUYIN:aweme-1234567890#photo:1", targets));
+  }
+
+  @Test
+  public void downloadTaskEntityRoundTrip_preservesPlatformAwareResourceKey() {
+    DownloadTask original = task(Platform.TIKTOK, "aweme-1234567890#video", DownloadTask.Status.QUEUED);
+
+    DownloadTask restored = DownloadTaskEntity.fromTask(original).toTask();
+
+    assertEquals("TIKTOK:aweme-1234567890#video", restored.getResourceKey());
+    assertEquals(Platform.TIKTOK, restored.getResourceItem().platform());
   }
 
   private DownloadTask task(

@@ -4,6 +4,7 @@ import androidx.room.Entity;
 import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 
 @Entity(tableName = "resources")
@@ -12,6 +13,7 @@ public class ResourceEntity {
   public long id;
 
   public long parentId; // 0 for root
+  public Platform platform = Platform.DOUYIN;
 
   public int imageResId;
   public String text;
@@ -29,6 +31,7 @@ public class ResourceEntity {
 
   @Ignore
   public ResourceEntity(
+      Platform platform,
       long parentId,
       int imageResId,
       String text,
@@ -36,6 +39,7 @@ public class ResourceEntity {
       long createTime,
       int childrenNum,
       boolean isLeaf) {
+    this.platform = platform == null ? Platform.DOUYIN : platform;
     this.parentId = parentId;
     this.imageResId = imageResId;
     this.text = text;
@@ -48,9 +52,22 @@ public class ResourceEntity {
   }
 
   @Ignore
+  public ResourceEntity(
+      long parentId,
+      int imageResId,
+      String text,
+      CardType type,
+      long createTime,
+      int childrenNum,
+      boolean isLeaf) {
+    this(Platform.DOUYIN, parentId, imageResId, text, type, createTime, childrenNum, isLeaf);
+  }
+
+  @Ignore
   public static ResourceEntity fromResourceItem(long parentId, ResourceItem item) {
     ResourceEntity entity =
         new ResourceEntity(
+            item.platform(),
             parentId,
             item.imageResId(),
             item.text(),
@@ -67,6 +84,7 @@ public class ResourceEntity {
 
   public ResourceItem toResourceItem() {
     return new ResourceItem(
+        platform,
         id,
         parentId,
         imageResId,
