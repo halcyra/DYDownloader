@@ -64,6 +64,20 @@ public class TikTokDownloaderTest {
   }
 
   @Test
+  public void collectAccountWorksInfo_prefersSecUidFromUrlBeforeHtmlFallback() throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildAccountClientPreferringUrlSecUid(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectAccountWorksInfo(
+            "https://www.tiktok.com/@creator?secUid=MS4wLjABAAAAurl1234", "msToken=base");
+
+    assertEquals(1, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals(Platform.TIKTOK, profiles.get(0).platform());
+  }
+
+  @Test
   public void collectMixWorksInfo_readsCollectionIdFromUrlAndDeduplicatesAcrossPages()
       throws Exception {
     TikTokDownloader downloader = new TikTokDownloader(buildCollectionClient(), "msToken=base");
@@ -79,6 +93,19 @@ public class TikTokDownloaderTest {
     assertEquals(Platform.TIKTOK, profiles.get(1).platform());
     assertEquals(MediaType.IMAGE, profiles.get(1).mediaType());
     assertEquals("Collection title", profiles.get(1).collectionTitle());
+  }
+
+  @Test
+  public void collectMixWorksInfo_readsCollectionIdFromHtmlFallback() throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildCollectionClientUsingHtmlFallback(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectMixWorksInfo("https://www.tiktok.com/@creator/collection/list", "msToken=base");
+
+    assertEquals(1, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals("Collection title", profiles.get(0).collectionTitle());
   }
 
   private static OkHttpClient buildAccountClient() {
@@ -166,6 +193,74 @@ public class TikTokDownloaderTest {
                     "{\"itemList\":["
                         + collectionVideoItem("7345678901234567890")
                         + "],\"hasMore\":true,\"cursor\":\"1\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildAccountClientPreferringUrlSecUid() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "ttwid=ttwid-cookie; Path=/");
+              }
+              if ("/@creator".equals(encodedPath)) {
+                return response(request, 200, "text/html", "<html>missing-secuid</html>");
+              }
+              if ("/api/post/item_list/".equals(encodedPath)) {
+                assertEquals("MS4wLjABAAAAurl1234", request.url().queryParameter("secUid"));
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":[" + accountVideoItem("7345678901234567890") + "],\"hasMore\":false,\"cursor\":\"0\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildCollectionClientUsingHtmlFallback() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/@creator/collection/list".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "<html>\"canonical\":\"https://www.tiktok.com/@creator/collection/list-7345678901234567890\"</html>");
+              }
+              if ("/api/collection/item_list/".equals(encodedPath)) {
+                assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":[" + collectionVideoItem("7345678901234567890") + "],\"hasMore\":false,\"cursor\":\"0\"}");
               }
               throw new IOException("Unexpected URL: " + url);
             })
