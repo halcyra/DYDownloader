@@ -7,8 +7,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.hhst.dydownloader.model.Platform;
 
 public class CookiesActivity extends AppCompatActivity {
-  private static final String EXTRA_PLATFORM = "extra_platform";
-
   private TextView douyinCookieStatus;
   private TextView tiktokCookieStatus;
 
@@ -51,7 +49,7 @@ public class CookiesActivity extends AppCompatActivity {
 
   private void openCookieLogin(Platform platform) {
     Intent intent = new Intent(this, CookieWebViewActivity.class);
-    intent.putExtra(EXTRA_PLATFORM, platform.name());
+    intent.putExtra(CookieWebViewActivity.EXTRA_PLATFORM, platform.name());
     startActivity(intent);
   }
 

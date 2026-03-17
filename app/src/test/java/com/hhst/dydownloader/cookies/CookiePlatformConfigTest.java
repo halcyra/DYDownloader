@@ -26,4 +26,14 @@ public class CookiePlatformConfigTest {
     assertTrue(config.forceDesktopUserAgent());
     assertFalse(config.allowExternalAppRedirects());
   }
+
+  @Test
+  public void tiktokConfig_readsCookiesFromTiktokHostsOnly() {
+    CookiePlatformConfig config = CookiePlatformConfig.forPlatform(Platform.TIKTOK);
+
+    assertEquals("https://www.tiktok.com/", config.cookieUrl());
+    assertTrue(config.isTrustedWebUrl("https://www.tiktok.com/@creator/video/7345678901234567890"));
+    assertTrue(config.isTrustedWebUrl("https://vm.tiktok.com/ZM123456/"));
+    assertFalse(config.isTrustedWebUrl("https://accounts.google.com/o/oauth2/v2/auth"));
+  }
 }
