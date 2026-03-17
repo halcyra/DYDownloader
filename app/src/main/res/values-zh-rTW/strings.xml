@@ -35,6 +35,8 @@
     <string name="language_option_zh_tw">繁體中文</string>
     <string name="clear_cache">清除快取</string>
     <string name="cookies">Cookies</string>
+    <string name="cookies_platform_douyin">抖音</string>
+    <string name="cookies_platform_tiktok">TikTok</string>
     <string name="retry">重試</string>
     <string name="dialog_batch_delete_title">批量刪除</string>
     <string name="dialog_detail_title">詳情</string>

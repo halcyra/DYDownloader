@@ -35,6 +35,11 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
         <activity
+            android:name=".CookiesActivity"
+            android:exported="false"
+            android:label="@string/cookies"
+            android:parentActivityName=".SettingsActivity" />
+        <activity
             android:name=".CookieWebViewActivity"
             android:exported="false"
             android:label="@string/cookies"

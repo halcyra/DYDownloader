@@ -35,6 +35,8 @@
     <string name="language_option_zh_tw">繁體中文</string>
     <string name="clear_cache">Clear Cache</string>
     <string name="cookies">Cookies</string>
+    <string name="cookies_platform_douyin">Douyin</string>
+    <string name="cookies_platform_tiktok">TikTok</string>
     <string name="retry">Retry</string>
     <string name="dialog_batch_delete_title">Batch Delete</string>
     <string name="dialog_detail_title">Detail</string>
