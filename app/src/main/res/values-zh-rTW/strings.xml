@@ -44,7 +44,7 @@
     <string name="dialog_ok">確定</string>
     <string name="dialog_delete_single_message">刪除這項內容？</string>
     <string name="dialog_delete_local_files">同時刪除本機檔案</string>
-    <string name="invalid_douyin_link">未找到抖音連結</string>
+    <string name="invalid_supported_link">未找到支援的平台連結</string>
     <string name="clipboard_link_detected">偵測到剪貼簿連結</string>
     <string name="press_back_again_to_exit">再按一次返回鍵退出應用</string>
     <string name="clear_cache_confirm">確定清除所有快取？</string>
