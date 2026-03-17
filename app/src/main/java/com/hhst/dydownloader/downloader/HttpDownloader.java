@@ -1,6 +1,5 @@
 package com.hhst.dydownloader.downloader;
 
-import com.hhst.dydownloader.douyin.DouyinDownloader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -13,9 +12,7 @@ import okhttp3.Response;
 
 public class HttpDownloader {
   private final OkHttpClient client;
-  private final String userAgent;
-  private final String referer;
-  private final String cookie;
+  private final PlatformRequestContext requestContext;
 
   public HttpDownloader(OkHttpClient client, String userAgent, String referer) {
     this(client, userAgent, referer, "");
@@ -23,9 +20,17 @@ public class HttpDownloader {
 
   public HttpDownloader(OkHttpClient client, String userAgent, String referer, String cookie) {
     this.client = client;
-    this.userAgent = userAgent;
-    this.referer = referer;
-    this.cookie = cookie == null ? "" : cookie.trim();
+    this.requestContext =
+        new PlatformRequestContext(
+            userAgent, referer, cookie, java.util.List.of("douyin.com", "iesdouyin.com"));
+  }
+
+  public HttpDownloader(OkHttpClient client, PlatformRequestContext requestContext) {
+    this.client = client;
+    this.requestContext =
+        requestContext == null
+            ? new PlatformRequestContext("", "", "", java.util.List.of())
+            : requestContext;
   }
 
   private static byte[] readHeader(File file, int length) throws IOException {
@@ -159,14 +164,14 @@ public class HttpDownloader {
   }
 
   private void applyHeaders(Request.Builder rb, String url) {
-    if (userAgent != null && !userAgent.isEmpty()) {
-      rb.header("User-Agent", userAgent);
+    if (!requestContext.userAgent().isEmpty()) {
+      rb.header("User-Agent", requestContext.userAgent());
     }
-    if (referer != null && !referer.isEmpty()) {
-      rb.header("Referer", referer);
+    if (!requestContext.referer().isEmpty()) {
+      rb.header("Referer", requestContext.referer());
     }
-    if (!cookie.isEmpty() && DouyinDownloader.shouldAttachCookie(url)) {
-      rb.header("Cookie", cookie);
+    if (requestContext.shouldAttachCookie(url)) {
+      rb.header("Cookie", requestContext.cookie());
     }
     // Avoid transparent gzip which may hide Content-Length.
     rb.header("Accept-Encoding", "identity");

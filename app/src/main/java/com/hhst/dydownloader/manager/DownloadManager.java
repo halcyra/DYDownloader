@@ -11,7 +11,9 @@ import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.douyin.AwemeProfile;
 import com.hhst.dydownloader.douyin.MediaType;
 import com.hhst.dydownloader.downloader.HttpDownloader;
+import com.hhst.dydownloader.downloader.PlatformRequestContexts;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import com.hhst.dydownloader.util.StoragePathUtils;
 import java.io.File;
@@ -93,7 +95,6 @@ public class DownloadManager {
     task.setError(null);
     postToMain(() -> DownloadQueue.updateTask(task));
 
-    String cookie = AppPrefs.getCookie(context);
     File tempDownloadDir = downloadStorage.tempDirectory();
 
     ResourceItem item = task.getResourceItem();
@@ -101,6 +102,7 @@ public class DownloadManager {
       if (item == null) {
         throw new IOException("Empty task");
       }
+      String cookie = AppPrefs.getCookie(context, item.platform());
 
       DownloadPayload payload = payloadFactory.build(cookie, item);
       String relativeDir = resolveDownloadRelativeDir(item);
@@ -108,10 +110,7 @@ public class DownloadManager {
 
       HttpDownloader httpDownloader =
           new HttpDownloader(
-              httpClient,
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              "https://www.douyin.com/?recommend=1",
-              cookie);
+              httpClient, PlatformRequestContexts.forPlatform(item.platform(), cookie));
 
       List<DownloadedAsset> assets =
           payload.imagePost()
@@ -321,6 +320,7 @@ public class DownloadManager {
 
     database.runInTransaction(
         () -> {
+          Platform platform = resolvePlatform(item, profile);
           long now = System.currentTimeMillis();
           boolean isSinglePhotoLeaf = imagePost && SourceKeyUtils.photoIndex(item.sourceKey()) >= 0;
           boolean isSingleLiveLeaf = imagePost && SourceKeyUtils.liveIndex(item.sourceKey()) >= 0;
@@ -349,19 +349,27 @@ public class DownloadManager {
 
           ResourceEntity root = null;
           if (!normalizedSourceKey.isBlank()) {
-            root = resourceDao.getBySourceKey(normalizedSourceKey);
+            root = resourceDao.getBySourceKey(platform, normalizedSourceKey);
           }
           long rootId;
           if (root == null) {
             root =
                 new ResourceEntity(
-                    0, rootType.getIconResId(), title, rootType, now, expectedChildren, false);
+                    platform,
+                    0,
+                    rootType.getIconResId(),
+                    title,
+                    rootType,
+                    now,
+                    expectedChildren,
+                    false);
             root.thumbnailUrl = thumb;
             root.sourceKey = normalizedSourceKey;
             root.downloadPath = assets.get(0).mediaReference();
             rootId = resourceDao.insert(root);
           } else {
             rootId = root.id;
+            root.platform = platform;
             root.text = title;
             root.type = rootType;
             root.imageResId = rootType.getIconResId();
@@ -378,7 +386,13 @@ public class DownloadManager {
             MediaType leafType = isSingleLiveLeaf ? MediaType.VIDEO : MediaType.IMAGE;
             DownloadedAsset primaryAsset = assets.get(0);
             upsertSingleImageChild(
-                rootId, item.sourceKey(), thumb, primaryAsset.mediaReference(), leafType, now);
+                rootId,
+                platform,
+                item.sourceKey(),
+                thumb,
+                primaryAsset.mediaReference(),
+                leafType,
+                now);
             if (isSingleLiveLeaf && !primaryAsset.coverReference().isBlank()) {
               int liveIndex = Math.max(0, SourceKeyUtils.liveIndex(item.sourceKey()));
               String coverSourceKey =
@@ -388,6 +402,7 @@ public class DownloadManager {
               if (!coverSourceKey.isBlank()) {
                 upsertSingleImageChild(
                     rootId,
+                    platform,
                     coverSourceKey,
                     thumb,
                     primaryAsset.coverReference(),
@@ -397,15 +412,26 @@ public class DownloadManager {
             }
           } else if (isVideoCoverLeaf) {
             upsertVideoCoverChild(
-                rootId, normalizedSourceKey, thumb, assets.get(0).mediaReference(), now);
+                rootId,
+                platform,
+                normalizedSourceKey,
+                thumb,
+                assets.get(0).mediaReference(),
+                now);
           } else if (imagePost) {
-            replaceChildren(rootId, normalizedSourceKey, thumb, assets, now);
+            replaceChildren(rootId, platform, normalizedSourceKey, thumb, assets, now);
           } else {
             DownloadedAsset videoAsset = assets.get(0);
-            upsertVideoChild(rootId, normalizedSourceKey, thumb, videoAsset.mediaReference(), now);
+            upsertVideoChild(
+                rootId, platform, normalizedSourceKey, thumb, videoAsset.mediaReference(), now);
             if (!videoAsset.coverReference().isBlank()) {
               upsertVideoCoverChild(
-                  rootId, normalizedSourceKey, thumb, videoAsset.coverReference(), now);
+                  rootId,
+                  platform,
+                  normalizedSourceKey,
+                  thumb,
+                  videoAsset.coverReference(),
+                  now);
             }
           }
 
@@ -481,7 +507,7 @@ public class DownloadManager {
   }
 
   private void upsertVideoCoverChild(
-      long rootId, String rootSourceKey, String thumb, String reference, long now) {
+      long rootId, Platform platform, String rootSourceKey, String thumb, String reference, long now) {
     String safeRootSourceKey = rootSourceKey == null ? "" : rootSourceKey.trim();
     String coverSourceKey = safeRootSourceKey.isBlank() ? "" : safeRootSourceKey + "#cover";
     ResourceEntity child =
@@ -490,10 +516,11 @@ public class DownloadManager {
                 .filter(existing -> existing.type == CardType.PHOTO)
                 .findFirst()
                 .orElse(null)
-            : resourceDao.getByParentIdAndSourceKey(rootId, coverSourceKey);
+            : resourceDao.getByParentIdAndSourceKey(rootId, platform, coverSourceKey);
     if (child == null) {
       child =
           new ResourceEntity(
+              platform,
               rootId,
               CardType.PHOTO.getIconResId(),
               context.getString(R.string.download_child_cover),
@@ -503,6 +530,7 @@ public class DownloadManager {
               true);
       child.sourceKey = coverSourceKey;
     } else {
+      child.platform = platform;
       child.createTime = now;
     }
     child.thumbnailUrl = thumb;
@@ -515,7 +543,7 @@ public class DownloadManager {
   }
 
   private void upsertVideoChild(
-      long rootId, String rootSourceKey, String thumb, String reference, long now) {
+      long rootId, Platform platform, String rootSourceKey, String thumb, String reference, long now) {
     String safeRootSourceKey = rootSourceKey == null ? "" : rootSourceKey.trim();
     String videoSourceKey = safeRootSourceKey.isBlank() ? "" : safeRootSourceKey + "#video";
     ResourceEntity child =
@@ -524,10 +552,11 @@ public class DownloadManager {
                 .filter(existing -> existing.type == CardType.VIDEO)
                 .findFirst()
                 .orElse(null)
-            : resourceDao.getByParentIdAndSourceKey(rootId, videoSourceKey);
+            : resourceDao.getByParentIdAndSourceKey(rootId, platform, videoSourceKey);
     if (child == null) {
       child =
           new ResourceEntity(
+              platform,
               rootId,
               CardType.VIDEO.getIconResId(),
               context.getString(R.string.download_child_video),
@@ -537,6 +566,7 @@ public class DownloadManager {
               true);
       child.sourceKey = videoSourceKey;
     } else {
+      child.platform = platform;
       child.createTime = now;
     }
     child.thumbnailUrl = thumb;
@@ -549,7 +579,12 @@ public class DownloadManager {
   }
 
   private void replaceChildren(
-      long rootId, String rootSourceKey, String thumb, List<DownloadedAsset> assets, long now) {
+      long rootId,
+      Platform platform,
+      String rootSourceKey,
+      String thumb,
+      List<DownloadedAsset> assets,
+      long now) {
     resourceDao.deleteByParentId(rootId);
     for (int i = 0; i < assets.size(); i++) {
       DownloadedAsset asset = assets.get(i);
@@ -561,6 +596,7 @@ public class DownloadManager {
         if (!asset.coverReference().isBlank()) {
           insertImageChild(
               rootId,
+              platform,
               thumb,
               asset.coverReference(),
               context.getString(R.string.download_child_photo, index),
@@ -569,6 +605,7 @@ public class DownloadManager {
         }
         insertVideoChild(
             rootId,
+            platform,
             thumb,
             asset.mediaReference(),
             context.getString(R.string.download_child_photo, index),
@@ -578,6 +615,7 @@ public class DownloadManager {
       }
       insertImageChild(
           rootId,
+          platform,
           thumb,
           asset.mediaReference(),
           context.getString(R.string.download_child_photo, index),
@@ -588,18 +626,20 @@ public class DownloadManager {
 
   private void upsertSingleImageChild(
       long rootId,
+      Platform platform,
       String childSourceKey,
       String thumb,
       String reference,
       MediaType mediaType,
       long now) {
     String safeSourceKey = childSourceKey == null ? "" : childSourceKey;
-    ResourceEntity child = resourceDao.getByParentIdAndSourceKey(rootId, safeSourceKey);
+    ResourceEntity child = resourceDao.getByParentIdAndSourceKey(rootId, platform, safeSourceKey);
     int photoNumber = Math.max(1, SourceKeyUtils.imageLeafIndex(childSourceKey) + 1);
     CardType childType = mediaType == MediaType.VIDEO ? CardType.VIDEO : CardType.PHOTO;
     if (child == null) {
       child =
           new ResourceEntity(
+              platform,
               rootId,
               childType.getIconResId(),
               context.getString(R.string.download_child_photo, photoNumber),
@@ -609,6 +649,7 @@ public class DownloadManager {
               true);
       child.sourceKey = safeSourceKey;
     } else {
+      child.platform = platform;
       child.createTime = now;
       child.type = childType;
       child.imageResId = childType.getIconResId();
@@ -644,13 +685,19 @@ public class DownloadManager {
   }
 
   private void insertImageChild(
-      long rootId, String thumb, String reference, String text, String sourceKey, long now) {
+      long rootId,
+      Platform platform,
+      String thumb,
+      String reference,
+      String text,
+      String sourceKey,
+      long now) {
     if (reference == null || reference.isBlank()) {
       return;
     }
     ResourceEntity child =
         new ResourceEntity(
-            rootId, CardType.PHOTO.getIconResId(), text, CardType.PHOTO, now, 0, true);
+            platform, rootId, CardType.PHOTO.getIconResId(), text, CardType.PHOTO, now, 0, true);
     child.thumbnailUrl = thumb;
     child.downloadPath = reference;
     child.sourceKey = sourceKey;
@@ -658,13 +705,19 @@ public class DownloadManager {
   }
 
   private void insertVideoChild(
-      long rootId, String thumb, String reference, String text, String sourceKey, long now) {
+      long rootId,
+      Platform platform,
+      String thumb,
+      String reference,
+      String text,
+      String sourceKey,
+      long now) {
     if (reference == null || reference.isBlank()) {
       return;
     }
     ResourceEntity child =
         new ResourceEntity(
-            rootId, CardType.VIDEO.getIconResId(), text, CardType.VIDEO, now, 0, true);
+            platform, rootId, CardType.VIDEO.getIconResId(), text, CardType.VIDEO, now, 0, true);
     child.thumbnailUrl = thumb;
     child.downloadPath = reference;
     child.sourceKey = sourceKey;
@@ -680,6 +733,16 @@ public class DownloadManager {
 
   private CardType normalizeRootType(CardType type) {
     return type == CardType.COLLECTION ? CardType.COLLECTION : CardType.ALBUM;
+  }
+
+  private Platform resolvePlatform(ResourceItem item, AwemeProfile profile) {
+    if (profile != null && profile.platform() != null) {
+      return profile.platform();
+    }
+    if (item != null && item.platform() != null) {
+      return item.platform();
+    }
+    return Platform.DOUYIN;
   }
 
   public void shutdown() {

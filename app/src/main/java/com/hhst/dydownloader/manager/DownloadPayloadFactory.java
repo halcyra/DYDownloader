@@ -3,13 +3,25 @@ package com.hhst.dydownloader.manager;
 import com.hhst.dydownloader.douyin.AwemeProfile;
 import com.hhst.dydownloader.douyin.DouyinDownloader;
 import com.hhst.dydownloader.douyin.MediaType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
+import com.hhst.dydownloader.tiktok.TikTokDownloader;
 import com.hhst.dydownloader.util.MediaSourceUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 final class DownloadPayloadFactory {
+  private final ProfileLoader profileLoader;
+
+  DownloadPayloadFactory() {
+    this(DownloadPayloadFactory::loadProfile);
+  }
+
+  DownloadPayloadFactory(ProfileLoader profileLoader) {
+    this.profileLoader = profileLoader;
+  }
+
   DownloadPayload build(String cookie, ResourceItem item) throws Exception {
     List<String> urls = item.downloadUrls();
     boolean imagePost = item.imagePost() || SourceKeyUtils.hasImageLeafMarker(item.sourceKey());
@@ -18,8 +30,7 @@ final class DownloadPayloadFactory {
     List<MediaType> mediaTypes = inferMediaTypes(item, urls, imagePost);
 
     if ((urls == null || urls.isEmpty()) && !baseSourceKey.isBlank()) {
-      DouyinDownloader downloader = new DouyinDownloader(cookie);
-      profile = downloader.collectWorkInfo(baseSourceKey);
+      profile = profileLoader.load(item.platform(), cookie, baseSourceKey);
       urls = profile.downloadUrls();
       imagePost =
           profile.mediaType() == MediaType.IMAGE
@@ -270,5 +281,17 @@ final class DownloadPayloadFactory {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim();
+  }
+
+  private static AwemeProfile loadProfile(Platform platform, String cookie, String sourceKey)
+      throws Exception {
+    if (platform == Platform.TIKTOK) {
+      return new TikTokDownloader(cookie).collectWorkInfo(sourceKey);
+    }
+    return new DouyinDownloader(cookie).collectWorkInfo(sourceKey);
+  }
+
+  interface ProfileLoader {
+    AwemeProfile load(Platform platform, String cookie, String sourceKey) throws Exception;
   }
 }
