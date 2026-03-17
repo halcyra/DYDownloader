@@ -1,9 +1,20 @@
 package com.hhst.dydownloader.tiktok;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.hhst.dydownloader.douyin.AwemeProfile;
+import com.hhst.dydownloader.douyin.MediaType;
+import com.hhst.dydownloader.model.Platform;
+import java.io.IOException;
+import java.util.List;
 import org.junit.Test;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class TikTokDownloaderTest {
 
@@ -20,5 +31,233 @@ public class TikTokDownloaderTest {
   public void containsTikTokLink_detectsShareText() {
     assertTrue(TikTokDownloader.containsTikTokLink("watch https://vm.tiktok.com/ZM1234567/ now"));
     assertFalse(TikTokDownloader.containsTikTokLink("https://example.com/not-tiktok"));
+  }
+
+  @Test
+  public void isAccountLink_detectsUserProfileLinks() {
+    assertTrue(TikTokDownloader.isAccountLink("https://www.tiktok.com/@creator"));
+    assertFalse(TikTokDownloader.isAccountLink("https://www.tiktok.com/@creator/video/1"));
+  }
+
+  @Test
+  public void isMixLink_detectsCollectionLinks() {
+    assertTrue(
+        TikTokDownloader.isMixLink(
+            "https://www.tiktok.com/@creator/collection/list-7345678901234567890"));
+    assertFalse(TikTokDownloader.isMixLink("https://www.tiktok.com/@creator"));
+  }
+
+  @Test
+  public void collectAccountWorksInfo_readsSecUidFromHtmlAndDeduplicatesAcrossPages()
+      throws Exception {
+    TikTokDownloader downloader = new TikTokDownloader(buildAccountClient(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectAccountWorksInfo("https://www.tiktok.com/@creator", "msToken=base");
+
+    assertEquals(2, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals("7345678901234567891", profiles.get(1).awemeId());
+    assertEquals(Platform.TIKTOK, profiles.get(0).platform());
+    assertEquals(MediaType.VIDEO, profiles.get(0).mediaType());
+    assertEquals(MediaType.IMAGE, profiles.get(1).mediaType());
+  }
+
+  @Test
+  public void collectMixWorksInfo_readsCollectionIdFromUrlAndDeduplicatesAcrossPages()
+      throws Exception {
+    TikTokDownloader downloader = new TikTokDownloader(buildCollectionClient(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectMixWorksInfo(
+            "https://www.tiktok.com/@creator/collection/list-7345678901234567890",
+            "msToken=base");
+
+    assertEquals(2, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals("7345678901234567891", profiles.get(1).awemeId());
+    assertEquals(Platform.TIKTOK, profiles.get(1).platform());
+    assertEquals(MediaType.IMAGE, profiles.get(1).mediaType());
+    assertEquals("Collection title", profiles.get(1).collectionTitle());
+  }
+
+  private static OkHttpClient buildAccountClient() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "ttwid=ttwid-cookie; Path=/");
+              }
+              if ("/@creator".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "<html>\"verified\":true,\"secUid\":\"MS4wLjABAAAA1234\"</html>");
+              }
+              if ("/api/post/item_list/".equals(encodedPath)) {
+                String cursor = request.url().queryParameter("cursor");
+                if ("1".equals(cursor)) {
+                  return response(
+                      request,
+                      200,
+                      "application/json",
+                      "{\"itemList\":["
+                          + accountVideoItem("7345678901234567890")
+                          + ","
+                          + accountImageItem("7345678901234567891")
+                          + "],\"hasMore\":false,\"cursor\":\"1\"}");
+                }
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + accountVideoItem("7345678901234567890")
+                        + "],\"hasMore\":true,\"cursor\":\"1\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildCollectionClient() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/api/collection/item_list/".equals(encodedPath)) {
+                String cursor = request.url().queryParameter("cursor");
+                if ("1".equals(cursor)) {
+                  return response(
+                      request,
+                      200,
+                      "application/json",
+                      "{\"itemList\":["
+                          + collectionVideoItem("7345678901234567890")
+                          + ","
+                          + collectionImageItem("7345678901234567891")
+                          + "],\"hasMore\":false,\"cursor\":\"1\"}");
+                }
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + collectionVideoItem("7345678901234567890")
+                        + "],\"hasMore\":true,\"cursor\":\"1\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static Response response(Request request, int code, String contentType, String body) {
+    return response(request, code, contentType, body, null);
+  }
+
+  private static Response response(
+      Request request, int code, String contentType, String body, String setCookieHeader) {
+    Response.Builder builder =
+        new Response.Builder()
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .code(code)
+            .message("OK")
+            .body(ResponseBody.create(body, okhttp3.MediaType.get(contentType)));
+    if (setCookieHeader != null) {
+      builder.addHeader("Set-Cookie", setCookieHeader);
+    }
+    return builder.build();
+  }
+
+  private static String accountVideoItem(String id) {
+    return "{"
+        + "\"id\":\""
+        + id
+        + "\","
+        + "\"desc\":\"video-"
+        + id
+        + "\","
+        + "\"createTime\":1710000000,"
+        + "\"author\":{\"nickname\":\"creator\",\"secUid\":\"MS4wLjABAAAA1234\"},"
+        + "\"video\":{\"cover\":\"https://img.example.com/"
+        + id
+        + ".jpg\",\"playAddr\":\"https://video.example.com/"
+        + id
+        + ".mp4\"}"
+        + "}";
+  }
+
+  private static String accountImageItem(String id) {
+    return "{"
+        + "\"id\":\""
+        + id
+        + "\","
+        + "\"desc\":\"image-"
+        + id
+        + "\","
+        + "\"createTime\":1710000001,"
+        + "\"author\":{\"nickname\":\"creator\",\"secUid\":\"MS4wLjABAAAA1234\"},"
+        + "\"imagePost\":{\"images\":[{\"imageURL\":{\"urlList\":[\"https://img.example.com/"
+        + id
+        + ".jpeg\"]}}]}"
+        + "}";
+  }
+
+  private static String collectionVideoItem(String id) {
+    return "{"
+        + "\"id\":\""
+        + id
+        + "\","
+        + "\"desc\":\"video-"
+        + id
+        + "\","
+        + "\"createTime\":1710000000,"
+        + "\"author\":{\"nickname\":\"creator\",\"secUid\":\"MS4wLjABAAAA1234\"},"
+        + "\"video\":{\"cover\":\"https://img.example.com/"
+        + id
+        + ".jpg\",\"playAddr\":\"https://video.example.com/"
+        + id
+        + ".mp4\"},"
+        + "\"collectionTitle\":\"Collection title\""
+        + "}";
+  }
+
+  private static String collectionImageItem(String id) {
+    return "{"
+        + "\"id\":\""
+        + id
+        + "\","
+        + "\"desc\":\"image-"
+        + id
+        + "\","
+        + "\"createTime\":1710000001,"
+        + "\"author\":{\"nickname\":\"creator\",\"secUid\":\"MS4wLjABAAAA1234\"},"
+        + "\"imagePost\":{\"images\":[{\"imageURL\":{\"urlList\":[\"https://img.example.com/"
+        + id
+        + ".jpeg\"]}}]},"
+        + "\"collectionTitle\":\"Collection title\""
+        + "}";
   }
 }
