@@ -22,6 +22,14 @@ final class DownloadPayloadFactory {
     this.profileLoader = profileLoader;
   }
 
+  private static AwemeProfile loadProfile(Platform platform, String cookie, String sourceKey)
+      throws Exception {
+    if (platform == Platform.TIKTOK) {
+      return new TikTokDownloader(cookie).collectWorkInfo(sourceKey);
+    }
+    return new DouyinDownloader(cookie).collectWorkInfo(sourceKey);
+  }
+
   DownloadPayload build(String cookie, ResourceItem item) throws Exception {
     List<String> urls = item.downloadUrls();
     boolean imagePost = item.imagePost() || SourceKeyUtils.hasImageLeafMarker(item.sourceKey());
@@ -281,14 +289,6 @@ final class DownloadPayloadFactory {
 
   private String normalize(String value) {
     return value == null ? "" : value.trim();
-  }
-
-  private static AwemeProfile loadProfile(Platform platform, String cookie, String sourceKey)
-      throws Exception {
-    if (platform == Platform.TIKTOK) {
-      return new TikTokDownloader(cookie).collectWorkInfo(sourceKey);
-    }
-    return new DouyinDownloader(cookie).collectWorkInfo(sourceKey);
   }
 
   interface ProfileLoader {

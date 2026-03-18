@@ -1,5 +1,7 @@
 package com.hhst.dydownloader.db;
 
+import androidx.annotation.NonNull;
+import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
@@ -13,6 +15,9 @@ public class ResourceEntity {
   public long id;
 
   public long parentId; // 0 for root
+
+  @NonNull
+  @ColumnInfo(defaultValue = "'DOUYIN'")
   public Platform platform = Platform.DOUYIN;
 
   public int imageResId;

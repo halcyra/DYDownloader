@@ -29,25 +29,6 @@ public final class TikTokDeviceIdResolver {
     this.httpClient = httpClient;
   }
 
-  public Result resolve(String userAgent, String cookie) throws IOException {
-    Request.Builder requestBuilder =
-        new Request.Builder()
-            .url(EXPLORE_URL)
-            .header("User-Agent", userAgent == null || userAgent.isBlank() ? "Mozilla/5.0" : userAgent)
-            .header("Referer", "https://www.tiktok.com/");
-    if (cookie != null && !cookie.isBlank()) {
-      requestBuilder.header("Cookie", cookie);
-    }
-    try (Response response = httpClient.newCall(requestBuilder.build()).execute()) {
-      if (!response.isSuccessful()) {
-        throw new IOException("Failed to resolve TikTok device_id: HTTP " + response.code());
-      }
-      String body = response.body() == null ? "" : response.body().string();
-      String deviceId = extractDeviceId(body);
-      return new Result(deviceId, extractCookieAdditions(response.headers("Set-Cookie")));
-    }
-  }
-
   static String extractDeviceId(String html) {
     if (html == null || html.isBlank()) {
       return "";
@@ -69,6 +50,26 @@ public final class TikTokDeviceIdResolver {
       cookiePairs.add(separator >= 0 ? header.substring(0, separator).trim() : header.trim());
     }
     return String.join("; ", cookiePairs);
+  }
+
+  public Result resolve(String userAgent, String cookie) throws IOException {
+    Request.Builder requestBuilder =
+        new Request.Builder()
+            .url(EXPLORE_URL)
+            .header(
+                "User-Agent", userAgent == null || userAgent.isBlank() ? "Mozilla/5.0" : userAgent)
+            .header("Referer", "https://www.tiktok.com/");
+    if (cookie != null && !cookie.isBlank()) {
+      requestBuilder.header("Cookie", cookie);
+    }
+    try (Response response = httpClient.newCall(requestBuilder.build()).execute()) {
+      if (!response.isSuccessful()) {
+        throw new IOException("Failed to resolve TikTok device_id: HTTP " + response.code());
+      }
+      String body = response.body() == null ? "" : response.body().string();
+      String deviceId = extractDeviceId(body);
+      return new Result(deviceId, extractCookieAdditions(response.headers("Set-Cookie")));
+    }
   }
 
   public record Result(String deviceId, String cookieAdditions) {}

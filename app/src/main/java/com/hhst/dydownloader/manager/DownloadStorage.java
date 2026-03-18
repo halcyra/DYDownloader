@@ -10,6 +10,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import androidx.annotation.RequiresApi;
 import com.hhst.dydownloader.util.StoragePathUtils;
+import com.hhst.dydownloader.util.StorageReferenceUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -123,10 +124,7 @@ final class DownloadStorage {
 
   private String storeInPublicDownloads(File sourceFile, String relativeDir, String fileName)
       throws IOException {
-    File downloadsRoot =
-        new File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME);
+    File downloadsRoot = StorageReferenceUtils.publicDownloadsRootDirectory();
     File targetDir = relativeDir.isBlank() ? downloadsRoot : new File(downloadsRoot, relativeDir);
     if (!targetDir.exists() && !targetDir.mkdirs()) {
       throw new IOException("Failed to create public download directory");

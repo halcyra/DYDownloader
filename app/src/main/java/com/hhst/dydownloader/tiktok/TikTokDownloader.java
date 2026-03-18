@@ -42,8 +42,8 @@ public final class TikTokDownloader {
   private static final int COLLECTION_PAGE_SIZE = 30;
   private static final String[] TRUSTED_SHARE_HOSTS = {"tiktok.com"};
   private static final String DEFAULT_USER_AGENT =
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-          + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36";
+      "Mozilla/5.0 (Linux; Android 14; Pixel 7) "
+          + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36";
   private static final String DEFAULT_REFERER = "https://www.tiktok.com/explore";
 
   private final OkHttpClient httpClient;
@@ -98,62 +98,6 @@ public final class TikTokDownloader {
     return normalized.contains("/collection/") || normalized.contains("/playlist/");
   }
 
-  public AwemeProfile collectWorkInfo(String shareLink) throws TikTokDownloaderException {
-    return collectWorkInfo(shareLink, defaultCookie);
-  }
-
-  public AwemeProfile collectWorkInfo(String shareLink, String cookie)
-      throws TikTokDownloaderException {
-    if (shareLink == null || shareLink.trim().isEmpty()) {
-      throw new IllegalArgumentException("shareLink is blank");
-    }
-    ResolvedShareLink resolved = resolveShareLink(shareLink, cookie);
-    DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
-    String itemId =
-        TikTokLinkParser.extractItemId(resolved.resolvedUrl())
-            .or(() -> TikTokLinkParser.extractItemId(shareLink))
-            .orElseThrow(
-                () -> new IllegalArgumentException("Cannot extract itemId from shareLink"));
-    JsonNode item = fetchItemDetail(itemId, deviceContext.cookie());
-    return mapItemToProfile(item);
-  }
-
-  public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink)
-      throws TikTokDownloaderException {
-    return collectAccountWorksInfo(accountShareLink, defaultCookie);
-  }
-
-  public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink, String cookie)
-      throws TikTokDownloaderException {
-    if (accountShareLink == null || accountShareLink.trim().isEmpty()) {
-      throw new IllegalArgumentException("accountShareLink is blank");
-    }
-    ResolvedShareLink resolved = resolveShareLink(accountShareLink, cookie);
-    String secUid =
-        resolveSecUid(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
-    DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
-    List<JsonNode> items = fetchAccountItemList(secUid, deviceContext.cookie());
-    return mapItemList(items);
-  }
-
-  public List<AwemeProfile> collectMixWorksInfo(String mixShareLink)
-      throws TikTokDownloaderException {
-    return collectMixWorksInfo(mixShareLink, defaultCookie);
-  }
-
-  public List<AwemeProfile> collectMixWorksInfo(String mixShareLink, String cookie)
-      throws TikTokDownloaderException {
-    if (mixShareLink == null || mixShareLink.trim().isEmpty()) {
-      throw new IllegalArgumentException("mixShareLink is blank");
-    }
-    ResolvedShareLink resolved = resolveShareLink(mixShareLink, cookie);
-    String collectionId =
-        resolveCollectionId(mixShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
-    DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
-    List<JsonNode> items = fetchCollectionItemList(collectionId, deviceContext.cookie());
-    return mapItemList(items);
-  }
-
   private static OkHttpClient defaultClient() {
     return new OkHttpClient.Builder()
         .followRedirects(true)
@@ -201,6 +145,70 @@ public final class TikTokDownloader {
     }
   }
 
+  @SafeVarargs
+  private static <T> Optional<T> firstPresent(Optional<T>... candidates) {
+    if (candidates == null) {
+      return Optional.empty();
+    }
+    for (Optional<T> candidate : candidates) {
+      if (candidate != null && candidate.isPresent()) {
+        return candidate;
+      }
+    }
+    return Optional.empty();
+  }
+
+  public AwemeProfile collectWorkInfo(String shareLink) throws TikTokDownloaderException {
+    return collectWorkInfo(shareLink, defaultCookie);
+  }
+
+  public AwemeProfile collectWorkInfo(String shareLink, String cookie)
+      throws TikTokDownloaderException {
+    if (shareLink == null || shareLink.trim().isEmpty()) {
+      throw new IllegalArgumentException("shareLink is blank");
+    }
+    ResolvedShareLink resolved = resolveShareLink(shareLink, cookie);
+    String itemId = resolveItemId(shareLink, resolved.resolvedUrl());
+    JsonNode item = resolveWorkItem(itemId, resolved.resolvedUrl(), resolved.normalizedCookie());
+    return mapItemToProfile(item);
+  }
+
+  public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink)
+      throws TikTokDownloaderException {
+    return collectAccountWorksInfo(accountShareLink, defaultCookie);
+  }
+
+  public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink, String cookie)
+      throws TikTokDownloaderException {
+    if (accountShareLink == null || accountShareLink.trim().isEmpty()) {
+      throw new IllegalArgumentException("accountShareLink is blank");
+    }
+    ResolvedShareLink resolved = resolveShareLink(accountShareLink, cookie);
+    String secUid =
+        resolveSecUid(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
+    DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
+    List<JsonNode> items = fetchAccountItemList(secUid, deviceContext.cookie());
+    return mapItemList(items);
+  }
+
+  public List<AwemeProfile> collectMixWorksInfo(String mixShareLink)
+      throws TikTokDownloaderException {
+    return collectMixWorksInfo(mixShareLink, defaultCookie);
+  }
+
+  public List<AwemeProfile> collectMixWorksInfo(String mixShareLink, String cookie)
+      throws TikTokDownloaderException {
+    if (mixShareLink == null || mixShareLink.trim().isEmpty()) {
+      throw new IllegalArgumentException("mixShareLink is blank");
+    }
+    ResolvedShareLink resolved = resolveShareLink(mixShareLink, cookie);
+    String collectionId =
+        resolveCollectionId(mixShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
+    DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
+    List<JsonNode> items = fetchCollectionItemList(collectionId, deviceContext.cookie());
+    return mapItemList(items);
+  }
+
   private ResolvedShareLink resolveShareLink(String shareLink, String cookie) {
     String normalizedCookie = normalizeCookie(cookie);
     Optional<String> extractedUrl = extractFirstUrl(shareLink);
@@ -238,7 +246,8 @@ public final class TikTokDownloader {
       return new DeviceCookieContext(deviceId, mergedCookie);
     }
     try {
-      TikTokDeviceIdResolver.Result result = deviceIdResolver.resolve(DEFAULT_USER_AGENT, mergedCookie);
+      TikTokDeviceIdResolver.Result result =
+          deviceIdResolver.resolve(DEFAULT_USER_AGENT, mergedCookie);
       cachedDeviceId = result.deviceId() == null ? "" : result.deviceId().trim();
       cachedCookieAdditions =
           result.cookieAdditions() == null ? "" : result.cookieAdditions().trim();
@@ -250,6 +259,16 @@ public final class TikTokDownloader {
     } catch (IOException e) {
       throw new TikTokDetailFetchException("Failed to resolve TikTok device_id", e);
     }
+  }
+
+  private JsonNode resolveWorkItem(String itemId, String resolvedUrl, String cookie)
+      throws TikTokDetailFetchException {
+    Optional<JsonNode> itemFromHtml = fetchItemDetailFromHtmlIfPresent(itemId, resolvedUrl, cookie);
+    if (itemFromHtml.isPresent()) {
+      return itemFromHtml.get();
+    }
+    DeviceCookieContext deviceContext = ensureDeviceId(cookie);
+    return fetchItemDetail(itemId, deviceContext.cookie());
   }
 
   private JsonNode fetchItemDetail(String itemId, String cookie) throws TikTokDetailFetchException {
@@ -280,49 +299,64 @@ public final class TikTokDownloader {
     }
   }
 
+  private Optional<JsonNode> fetchItemDetailFromHtmlIfPresent(
+      String itemId, String resolvedUrl, String cookie) {
+    try {
+      String html = fetchSharePageHtml(resolvedUrl, cookie);
+      Optional<String> itemStructJson = TikTokLinkParser.extractItemStructJson(html, itemId);
+      if (itemStructJson.isEmpty()) {
+        return Optional.empty();
+      }
+      JsonNode item = objectMapper.readTree(itemStructJson.get());
+      if (!item.isObject() || item.path("id").asText("").isBlank()) {
+        return Optional.empty();
+      }
+      return Optional.of(item);
+    } catch (IOException | RuntimeException ignored) {
+      return Optional.empty();
+    }
+  }
+
+  private String resolveItemId(String sourceText, String resolvedUrl) {
+    return TikTokLinkParser.extractItemId(resolvedUrl)
+        .or(() -> TikTokLinkParser.extractItemId(sourceText))
+        .orElseThrow(() -> new IllegalArgumentException("Cannot extract itemId from shareLink"));
+  }
+
   private String resolveSecUid(String sourceText, String resolvedUrl, String cookie)
       throws TikTokWorkListFetchException {
-    Optional<String> secUid = extractSecUidFromUrl(resolvedUrl);
-    if (secUid.isEmpty()) {
-      secUid = extractSecUidFromUrl(sourceText);
-    }
+    Optional<String> secUid =
+        firstPresent(extractSecUidFromUrl(resolvedUrl), extractSecUidFromUrl(sourceText));
     if (secUid.isEmpty() && (isAccountLink(resolvedUrl) || isAccountLink(sourceText))) {
       secUid = TikTokLinkParser.extractSecUidFromHtml(fetchPageHtml(resolvedUrl, cookie));
     }
-    return secUid
-        .map(String::trim)
-        .filter(value -> !value.isEmpty())
-        .orElseThrow(() -> new TikTokWorkListFetchException("Cannot extract secUid from share link"));
+    return requireResolvedValue(secUid, "Cannot extract secUid from share link");
   }
 
   private String resolveCollectionId(String sourceText, String resolvedUrl, String cookie)
       throws TikTokWorkListFetchException {
-    Optional<String> collectionId = TikTokLinkParser.extractCollectionId(resolvedUrl);
-    if (collectionId.isEmpty()) {
-      collectionId = TikTokLinkParser.extractCollectionId(sourceText);
-    }
-    if (collectionId.isEmpty()) {
-      collectionId = extractQueryValue(resolvedUrl, "collectionId");
-    }
-    if (collectionId.isEmpty()) {
-      collectionId = extractQueryValue(sourceText, "collectionId");
-    }
+    Optional<String> collectionId =
+        firstPresent(
+            TikTokLinkParser.extractCollectionId(resolvedUrl),
+            TikTokLinkParser.extractCollectionId(sourceText),
+            extractQueryValue(resolvedUrl, "collectionId"),
+            extractQueryValue(sourceText, "collectionId"));
     if (collectionId.isEmpty() && (isMixLink(resolvedUrl) || isMixLink(sourceText))) {
       collectionId = TikTokLinkParser.extractCollectionId(fetchPageHtml(resolvedUrl, cookie));
     }
-    return collectionId
-        .map(String::trim)
-        .filter(value -> !value.isEmpty())
-        .orElseThrow(
-            () -> new TikTokWorkListFetchException("Cannot extract collectionId from share link"));
+    return requireResolvedValue(collectionId, "Cannot extract collectionId from share link");
   }
 
   private Optional<String> extractSecUidFromUrl(String text) {
-    Optional<String> secUid = extractQueryValue(text, "secUid");
-    if (secUid.isEmpty()) {
-      secUid = extractQueryValue(text, "sec_uid");
-    }
-    return secUid;
+    return firstPresent(extractQueryValue(text, "secUid"), extractQueryValue(text, "sec_uid"));
+  }
+
+  private String requireResolvedValue(Optional<String> value, String errorMessage)
+      throws TikTokWorkListFetchException {
+    return value
+        .map(String::trim)
+        .filter(current -> !current.isEmpty())
+        .orElseThrow(() -> new TikTokWorkListFetchException(errorMessage));
   }
 
   private Optional<String> extractQueryValue(String text, String key) {
@@ -347,7 +381,7 @@ public final class TikTokDownloader {
         if (encodedValue.isBlank()) {
           return Optional.empty();
         }
-        return Optional.of(URLDecoder.decode(encodedValue, StandardCharsets.UTF_8));
+        return Optional.of(URLDecoder.decode(encodedValue, StandardCharsets.UTF_8.name()));
       }
       return Optional.empty();
     } catch (Exception ignored) {
@@ -409,8 +443,7 @@ public final class TikTokDownloader {
       params.put("sourceType", "113");
 
       JsonNode pageData = fetchItemPage(COLLECTION_LIST_API, params, cookie, "collection");
-      int newItems =
-          appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "collection");
+      int newItems = appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "collection");
       hasMore = parseHasMore(pageData.path("hasMore"));
       String nextCursor = parseCursor(pageData.path("cursor"), cursor);
       pageCount++;
@@ -427,7 +460,8 @@ public final class TikTokDownloader {
     return Collections.unmodifiableList(items);
   }
 
-  private JsonNode fetchItemPage(String apiUrl, Map<String, String> params, String cookie, String type)
+  private JsonNode fetchItemPage(
+      String apiUrl, Map<String, String> params, String cookie, String type)
       throws TikTokWorkListFetchException {
     String msToken = extractCookieField(cookie, "msToken");
     String query = requestSigner.sign(params, DEFAULT_USER_AGENT, cachedDeviceId, msToken);
@@ -507,17 +541,21 @@ public final class TikTokDownloader {
 
   private String fetchPageHtml(String url, String cookie) throws TikTokWorkListFetchException {
     try {
-      Request request =
-          requestBuilder(url, cookie)
-              .get()
-              .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-              .build();
-      try (Response response = httpClient.newCall(request).execute()) {
-        ResponseBody body = response.body();
-        return body != null ? body.string() : "";
-      }
+      return fetchSharePageHtml(url, cookie);
     } catch (IOException | RuntimeException e) {
       throw new TikTokWorkListFetchException("Failed to fetch TikTok share page", e);
+    }
+  }
+
+  private String fetchSharePageHtml(String url, String cookie) throws IOException {
+    Request request =
+        requestBuilder(url, cookie)
+            .get()
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .build();
+    try (Response response = httpClient.newCall(request).execute()) {
+      ResponseBody body = response.body();
+      return body != null ? body.string() : "";
     }
   }
 
@@ -530,12 +568,12 @@ public final class TikTokDownloader {
     params.put("browser_language", "zh-SG");
     params.put("browser_name", "Mozilla");
     params.put("browser_online", "true");
-    params.put("browser_platform", "Win32");
+    params.put("browser_platform", "Android");
     params.put("browser_version", DEFAULT_USER_AGENT);
     params.put("channel", "tiktok_web");
     params.put("cookie_enabled", "true");
     params.put("data_collection_enabled", "true");
-    params.put("device_platform", "web_pc");
+    params.put("device_platform", "web_mobile");
     params.put("enable_cache", "true");
     params.put("focus_state", "true");
     params.put("from_page", "user");
@@ -543,12 +581,12 @@ public final class TikTokDownloader {
     params.put("is_fullscreen", "false");
     params.put("is_page_visible", "true");
     params.put("language", "en");
-    params.put("os", "windows");
+    params.put("os", "android");
     params.put("priority_region", "US");
     params.put("referer", "");
     params.put("region", "US");
-    params.put("screen_height", "864");
-    params.put("screen_width", "1536");
+    params.put("screen_height", "915");
+    params.put("screen_width", "412");
     params.put("tz_name", "Asia/Shanghai");
     params.put("user_is_login", "true");
     params.put("webcast_language", "en");
@@ -560,8 +598,7 @@ public final class TikTokDownloader {
         new Request.Builder()
             .url(url)
             .header("User-Agent", DEFAULT_USER_AGENT)
-            .header("Referer", DEFAULT_REFERER)
-            .header("Accept-Encoding", "*/*");
+            .header("Referer", DEFAULT_REFERER);
     String normalizedCookie = normalizeCookie(cookie);
     if (!normalizedCookie.isBlank() && isTrustedShareUrl(url)) {
       builder.header("Cookie", normalizedCookie);
@@ -585,7 +622,8 @@ public final class TikTokDownloader {
         imagePost ? collectImageThumbnailUrls(item) : collectVideoThumbnailUrls(item);
     List<String> downloadUrls =
         imagePost ? collectImageDownloadUrls(item) : collectVideoDownloadUrls(item);
-    List<MediaType> imageMediaTypes = imagePost ? fillImageMediaTypes(downloadUrls.size()) : List.of();
+    List<MediaType> imageMediaTypes =
+        imagePost ? fillImageMediaTypes(downloadUrls.size()) : List.of();
     String thumbnailUrl = thumbnailUrls.isEmpty() ? "" : thumbnailUrls.get(0);
     return new AwemeProfile(
         Platform.TIKTOK,

@@ -46,4 +46,14 @@ public class TikTokLinkParserTest {
             .extractCollectionId("https://www.tiktok.com/@user/playlist/name-7345678901234567890")
             .orElseThrow());
   }
+
+  @Test
+  public void extractItemStructJson_readsEmbeddedItemStructObject() {
+    String html =
+        "<script>window.__UNIVERSAL_DATA_FOR_REHYDRATION__={\"itemStruct\":{\"id\":\"7345678901234567890\",\"desc\":\"hello\"}}</script>";
+
+    assertEquals(
+        "{\"id\":\"7345678901234567890\",\"desc\":\"hello\"}",
+        TikTokLinkParser.extractItemStructJson(html, "7345678901234567890").orElseThrow());
+  }
 }

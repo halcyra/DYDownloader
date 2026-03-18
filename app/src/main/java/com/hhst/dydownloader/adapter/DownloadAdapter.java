@@ -70,7 +70,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       holder.thumbnail.setImageResource(item.imageResId());
     }
     holder.title.setText(item.text());
-    bindPathRow(holder, task, item, context);
+    bindSavePathRow(holder, task, item, context);
     holder.typeIcon.setImageResource(item.type().getIconResId());
     holder.moreButton.setOnClickListener(
         v -> {
@@ -117,16 +117,9 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
                 ? task.getError()
                 : context.getString(R.string.download_error_unknown);
         holder.status.setText(R.string.download_status_failed_short);
-        holder.path.setEllipsize(TextUtils.TruncateAt.END);
-        holder.path.setText(
-            context.getString(
-                R.string.download_error_summary, summarizeError(errorMessage, context)));
-        holder.path.setTextColor(holder.errorPathTextColor);
-        holder.path.setClickable(false);
-        holder.path.setFocusable(false);
-        holder.path.setLongClickable(false);
-        holder.path.setOnClickListener(null);
-        holder.path.setOnLongClickListener(null);
+        bindErrorPathRow(
+            holder,
+            summarizeErrorMessage(errorMessage, context.getString(R.string.download_error_unknown)));
         holder.progress.setVisibility(View.GONE);
         holder.retryButton.setVisibility(View.VISIBLE);
         holder.retryButton.setOnClickListener(
@@ -144,14 +137,18 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
     return tasks.size();
   }
 
-  private void bindPathRow(
+  private void bindSavePathRow(
       @NonNull DownloadViewHolder holder,
       @NonNull DownloadTask task,
       ResourceItem item,
       Context context) {
-    holder.path.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-    holder.path.setText(context.getString(R.string.download_save_path, resolveDisplayPath(item)));
-    holder.path.setTextColor(holder.defaultPathTextColor);
+    bindPathContent(
+        holder,
+        context.getString(R.string.download_save_path_label),
+        resolveDisplayPath(item),
+        holder.defaultLabelTextColor,
+        holder.defaultPathTextColor,
+        TextUtils.TruncateAt.MIDDLE);
     holder.path.setClickable(true);
     holder.path.setFocusable(true);
     holder.path.setLongClickable(true);
@@ -171,6 +168,35 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
         });
   }
 
+  private void bindErrorPathRow(@NonNull DownloadViewHolder holder, @NonNull String errorMessage) {
+    bindPathContent(
+        holder,
+        holder.itemView.getContext().getString(R.string.download_error_label),
+        errorMessage,
+        holder.errorPathTextColor,
+        holder.errorPathTextColor,
+        TextUtils.TruncateAt.END);
+    holder.path.setClickable(false);
+    holder.path.setFocusable(false);
+    holder.path.setLongClickable(false);
+    holder.path.setOnClickListener(null);
+    holder.path.setOnLongClickListener(null);
+  }
+
+  private void bindPathContent(
+      @NonNull DownloadViewHolder holder,
+      @NonNull String label,
+      @NonNull String value,
+      int labelColor,
+      int valueColor,
+      @NonNull TextUtils.TruncateAt ellipsize) {
+    holder.pathLabel.setText(label);
+    holder.pathLabel.setTextColor(labelColor);
+    holder.path.setEllipsize(ellipsize);
+    holder.path.setText(value);
+    holder.path.setTextColor(valueColor);
+  }
+
   private String resolveDisplayPath(ResourceItem item) {
     if (item == null) {
       return StoragePathUtils.buildPublicDownloadDisplayPath("");
@@ -178,10 +204,10 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
     return StoragePathUtils.buildPublicDownloadDisplayPath(item.storageDir());
   }
 
-  private String summarizeError(String errorMessage, Context context) {
+  static String summarizeErrorMessage(String errorMessage, String fallbackMessage) {
     String compact =
         errorMessage == null || errorMessage.isBlank()
-            ? context.getString(R.string.download_error_unknown)
+            ? fallbackMessage
             : errorMessage.replaceAll("\\s+", " ").trim();
     if (compact.matches("^[A-Za-z0-9_.$]+:.*")) {
       compact = compact.substring(compact.indexOf(':') + 1).trim();
@@ -194,7 +220,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       compact = compact.substring(0, 57).trim() + "...";
     }
     if (compact.isEmpty()) {
-      compact = context.getString(R.string.download_error_unknown);
+      compact = fallbackMessage;
     }
     return compact;
   }
@@ -257,10 +283,11 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
 
   static class DownloadViewHolder extends RecyclerView.ViewHolder {
     final ImageView thumbnail, typeIcon;
-    final TextView title, path, status;
+    final TextView title, pathLabel, path, status;
     final LinearProgressIndicator progress;
     final com.google.android.material.button.MaterialButton retryButton;
     final View moreButton;
+    final int defaultLabelTextColor;
     final int defaultPathTextColor;
     final int errorPathTextColor;
 
@@ -269,11 +296,13 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       thumbnail = itemView.findViewById(R.id.downloadThumbnail);
       typeIcon = itemView.findViewById(R.id.downloadTypeIcon);
       title = itemView.findViewById(R.id.downloadTitle);
+      pathLabel = itemView.findViewById(R.id.downloadPathLabel);
       path = itemView.findViewById(R.id.downloadPath);
       status = itemView.findViewById(R.id.downloadStatus);
       progress = itemView.findViewById(R.id.downloadProgress);
       retryButton = itemView.findViewById(R.id.downloadRetry);
       moreButton = itemView.findViewById(R.id.downloadMore);
+      defaultLabelTextColor = pathLabel.getCurrentTextColor();
       defaultPathTextColor = path.getCurrentTextColor();
       errorPathTextColor = status.getCurrentTextColor();
     }

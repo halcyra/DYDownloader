@@ -1,6 +1,7 @@
 package com.hhst.dydownloader.db;
 
 import androidx.annotation.NonNull;
+import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -16,7 +17,10 @@ public class DownloadTaskEntity {
   private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
 
   @PrimaryKey @NonNull public String taskKey = "";
-  @NonNull public Platform platform = Platform.DOUYIN;
+
+  @NonNull
+  @ColumnInfo(defaultValue = "'DOUYIN'")
+  public Platform platform = Platform.DOUYIN;
 
   public Long resourceId;
   public long parentId;
@@ -80,10 +84,25 @@ public class DownloadTaskEntity {
     }
   }
 
+  static Platform parsePlatformPrefix(String taskKey) {
+    if (taskKey == null || taskKey.isBlank()) {
+      return null;
+    }
+    int separatorIndex = taskKey.indexOf(':');
+    if (separatorIndex <= 0) {
+      return null;
+    }
+    try {
+      return Platform.valueOf(taskKey.substring(0, separatorIndex));
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
+  }
+
   public DownloadTask toTask() {
     ResourceItem item =
         new ResourceItem(
-            platform,
+            resolvePlatform(),
             resourceId,
             parentId,
             imageResId,
@@ -108,5 +127,13 @@ public class DownloadTaskEntity {
     task.setProgress(progress);
     task.setError(error);
     return task;
+  }
+
+  private Platform resolvePlatform() {
+    Platform taskKeyPlatform = parsePlatformPrefix(taskKey);
+    if (taskKeyPlatform != null) {
+      return taskKeyPlatform;
+    }
+    return platform;
   }
 }

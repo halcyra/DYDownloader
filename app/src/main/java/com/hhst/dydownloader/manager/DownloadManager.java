@@ -1,6 +1,7 @@
 package com.hhst.dydownloader.manager;
 
 import android.content.Context;
+import android.util.Log;
 import android.os.Handler;
 import android.os.Looper;
 import com.hhst.dydownloader.AppPrefs;
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import okhttp3.OkHttpClient;
 
 public class DownloadManager {
+  private static final String TAG = "DownloadManager";
   private static DownloadManager instance;
   private final Context context;
   private final AppDatabase database;
@@ -125,6 +127,7 @@ public class DownloadManager {
       task.setProgress(100);
       postToMain(() -> DownloadQueue.updateTask(task));
     } catch (Exception e) {
+      Log.e(TAG, "Download failed for " + describeTask(task), e);
       String errorMsg = getCompactErrorMessage(e);
       task.setStatus(DownloadTask.Status.FAILED);
       task.setError(errorMsg);
@@ -153,6 +156,13 @@ public class DownloadManager {
     }
 
     return className + ": " + message;
+  }
+
+  private String describeTask(DownloadTask task) {
+    if (task == null || task.getResourceItem() == null) {
+      return "<unknown>";
+    }
+    return task.getResourceItem().key();
   }
 
   private List<DownloadedAsset> downloadImages(
@@ -412,12 +422,7 @@ public class DownloadManager {
             }
           } else if (isVideoCoverLeaf) {
             upsertVideoCoverChild(
-                rootId,
-                platform,
-                normalizedSourceKey,
-                thumb,
-                assets.get(0).mediaReference(),
-                now);
+                rootId, platform, normalizedSourceKey, thumb, assets.get(0).mediaReference(), now);
           } else if (imagePost) {
             replaceChildren(rootId, platform, normalizedSourceKey, thumb, assets, now);
           } else {
@@ -426,12 +431,7 @@ public class DownloadManager {
                 rootId, platform, normalizedSourceKey, thumb, videoAsset.mediaReference(), now);
             if (!videoAsset.coverReference().isBlank()) {
               upsertVideoCoverChild(
-                  rootId,
-                  platform,
-                  normalizedSourceKey,
-                  thumb,
-                  videoAsset.coverReference(),
-                  now);
+                  rootId, platform, normalizedSourceKey, thumb, videoAsset.coverReference(), now);
             }
           }
 
@@ -507,7 +507,12 @@ public class DownloadManager {
   }
 
   private void upsertVideoCoverChild(
-      long rootId, Platform platform, String rootSourceKey, String thumb, String reference, long now) {
+      long rootId,
+      Platform platform,
+      String rootSourceKey,
+      String thumb,
+      String reference,
+      long now) {
     String safeRootSourceKey = rootSourceKey == null ? "" : rootSourceKey.trim();
     String coverSourceKey = safeRootSourceKey.isBlank() ? "" : safeRootSourceKey + "#cover";
     ResourceEntity child =
@@ -543,7 +548,12 @@ public class DownloadManager {
   }
 
   private void upsertVideoChild(
-      long rootId, Platform platform, String rootSourceKey, String thumb, String reference, long now) {
+      long rootId,
+      Platform platform,
+      String rootSourceKey,
+      String thumb,
+      String reference,
+      long now) {
     String safeRootSourceKey = rootSourceKey == null ? "" : rootSourceKey.trim();
     String videoSourceKey = safeRootSourceKey.isBlank() ? "" : safeRootSourceKey + "#video";
     ResourceEntity child =

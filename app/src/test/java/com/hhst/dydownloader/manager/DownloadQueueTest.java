@@ -63,6 +63,40 @@ public class DownloadQueueTest {
     assertEquals(Platform.TIKTOK, restored.getResourceItem().platform());
   }
 
+  @Test
+  public void runRestoreTaskBlocking_returnsFalseWhenRestoreFails() {
+    boolean restored =
+        DownloadQueue.runRestoreTaskBlocking(
+            () -> {
+              throw new IllegalArgumentException("bad persisted row");
+            });
+
+    assertFalse(restored);
+  }
+
+  @Test
+  public void runRestoreTaskBlocking_returnsTrueWhenRestoreSucceeds() {
+    boolean restored = DownloadQueue.runRestoreTaskBlocking(() -> {});
+    assertTrue(restored);
+  }
+
+  @Test
+  public void buildRestorePlan_restoresRowsWhenPlatformFallsBackToDefault() {
+    DownloadTaskEntity valid =
+        DownloadTaskEntity.fromTask(task(Platform.TIKTOK, "aweme-1#video", DownloadTask.Status.QUEUED));
+    DownloadTaskEntity fallback =
+        DownloadTaskEntity.fromTask(task(Platform.DOUYIN, "aweme-2#video", DownloadTask.Status.QUEUED));
+    fallback.platform = null;
+    fallback.taskKey = "broken-task-key";
+
+    DownloadQueue.RestorePlan plan = DownloadQueue.buildRestorePlan(List.of(valid, fallback));
+
+    assertEquals(2, plan.tasks().size());
+    assertEquals("TIKTOK:aweme-1#video", plan.tasks().get(0).getResourceKey());
+    assertEquals("DOUYIN:aweme-2#video", plan.tasks().get(1).getResourceKey());
+    assertTrue(plan.invalidTaskKeys().isEmpty());
+  }
+
   private DownloadTask task(
       Platform platform, String sourceKey, DownloadTask.Status status) {
     ResourceItem item =

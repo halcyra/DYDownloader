@@ -71,22 +71,41 @@
             app:layout_constraintStart_toEndOf="@id/downloadThumbnailCard"
             app:layout_constraintTop_toTopOf="@id/downloadThumbnailCard" />
 
-        <TextView
-            android:id="@+id/downloadPath"
+        <LinearLayout
+            android:id="@+id/downloadPathRow"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="14dp"
             android:layout_marginEnd="8dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:clickable="true"
-            android:ellipsize="middle"
-            android:focusable="true"
-            android:maxLines="1"
-            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-            android:textColor="?attr/colorPrimary"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintBottom_toTopOf="@id/downloadStatusRow"
             app:layout_constraintEnd_toStartOf="@id/downloadMore"
-            app:layout_constraintStart_toEndOf="@id/downloadThumbnailCard" />
+            app:layout_constraintStart_toEndOf="@id/downloadThumbnailCard">
+
+            <TextView
+                android:id="@+id/downloadPathLabel"
+                android:layout_width="72dp"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <TextView
+                android:id="@+id/downloadPath"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:ellipsize="middle"
+                android:focusable="true"
+                android:maxLines="1"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:textColor="?attr/colorPrimary" />
+
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/downloadStatusRow"

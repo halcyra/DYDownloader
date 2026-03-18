@@ -263,7 +263,7 @@ public class ResourceFragment extends Fragment
     AtomicInteger completed = new AtomicInteger(0);
 
     for (CompletableFuture<ProbeResult> probeFuture : probeFutures) {
-      probeFuture.whenCompleteAsync(
+      probeFuture.whenComplete(
           (result, throwable) -> {
             if (generation != loadGeneration || destroyed.get()) {
               return;
@@ -293,99 +293,67 @@ public class ResourceFragment extends Fragment
             if (resolved.compareAndSet(false, true)) {
               applyLoadedProfiles(aggregated.profiles(), aggregated.rootType(), generation);
             }
-          },
-          exec);
+          });
     }
 
-    inFlightLoad = CompletableFuture.allOf(probeFutures.toArray(CompletableFuture[]::new));
+    inFlightLoad = CompletableFuture.allOf(probeFutures.toArray(new CompletableFuture[0]));
   }
 
   private List<CompletableFuture<ProbeResult>> createProbeFutures(
       String text, ResourceProbeRouter.Plan probePlan, String cookie, ExecutorService exec) {
     if (probePlan.platform() == Platform.TIKTOK) {
       TikTokDownloader downloader = new TikTokDownloader(cookie);
-      return probePlan.probeKinds().stream()
-          .map(kind -> CompletableFuture.supplyAsync(() -> probe(kind, text, downloader), exec))
-          .collect(Collectors.toList());
+      return submitProbeFutures(
+          probePlan.probeKinds(), exec, kind -> probe(kind, text, downloader));
     }
     DouyinDownloader downloader = new DouyinDownloader(cookie);
-    return probePlan.probeKinds().stream()
-        .map(kind -> CompletableFuture.supplyAsync(() -> probe(kind, text, downloader), exec))
+    return submitProbeFutures(probePlan.probeKinds(), exec, kind -> probe(kind, text, downloader));
+  }
+
+  private List<CompletableFuture<ProbeResult>> submitProbeFutures(
+      List<LinkKind> probeKinds, ExecutorService exec, ProbeTask probeTask) {
+    return probeKinds.stream()
+        .map(kind -> CompletableFuture.supplyAsync(() -> probeTask.run(kind), exec))
         .collect(Collectors.toList());
   }
 
   private ProbeResult probe(LinkKind kind, String text, DouyinDownloader downloader) {
     return switch (kind) {
-      case ACCOUNT -> probeAccount(text, downloader);
-      case MIX -> probeMix(text, downloader);
-      case WORK, UNKNOWN -> probeWork(text, downloader);
+      case ACCOUNT ->
+          probeCollection(text, "Account probe failed for ", downloader::collectAccountWorksInfo);
+      case MIX -> probeCollection(text, "Mix probe failed for ", downloader::collectMixWorksInfo);
+      case WORK, UNKNOWN ->
+          probeWork(text, "Single work probe failed for ", downloader::collectWorkInfo);
     };
   }
 
   private ProbeResult probe(LinkKind kind, String text, TikTokDownloader downloader) {
     return switch (kind) {
-      case ACCOUNT -> probeAccount(text, downloader);
-      case MIX -> probeMix(text, downloader);
-      case WORK, UNKNOWN -> probeWork(text, downloader);
+      case ACCOUNT ->
+          probeCollection(text, "TikTok account probe failed for ", downloader::collectAccountWorksInfo);
+      case MIX ->
+          probeCollection(text, "TikTok mix probe failed for ", downloader::collectMixWorksInfo);
+      case WORK, UNKNOWN ->
+          probeWork(text, "TikTok single work probe failed for ", downloader::collectWorkInfo);
     };
   }
 
-  private ProbeResult probeAccount(String text, DouyinDownloader downloader) {
+  private ProbeResult probeCollection(String text, String failurePrefix, ProfileListProbe probe) {
     try {
-      List<AwemeProfile> result = downloader.collectAccountWorksInfo(text);
+      List<AwemeProfile> result = probe.load(text);
       return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
     } catch (Exception e) {
-      Log.d(TAG, "Account probe failed for " + text, e);
+      Log.d(TAG, failurePrefix + text, e);
       return ProbeResult.empty(CardType.COLLECTION);
     }
   }
 
-  private ProbeResult probeMix(String text, DouyinDownloader downloader) {
+  private ProbeResult probeWork(String text, String failurePrefix, ProfileProbe probe) {
     try {
-      List<AwemeProfile> result = downloader.collectMixWorksInfo(text);
-      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
-    } catch (Exception e) {
-      Log.d(TAG, "Mix probe failed for " + text, e);
-      return ProbeResult.empty(CardType.COLLECTION);
-    }
-  }
-
-  private ProbeResult probeWork(String text, DouyinDownloader downloader) {
-    try {
-      AwemeProfile result = downloader.collectWorkInfo(text);
+      AwemeProfile result = probe.load(text);
       return new ProbeResult(List.of(result), CardType.ALBUM);
     } catch (Exception e) {
-      Log.d(TAG, "Single work probe failed for " + text, e);
-      return ProbeResult.empty(CardType.ALBUM);
-    }
-  }
-
-  private ProbeResult probeAccount(String text, TikTokDownloader downloader) {
-    try {
-      List<AwemeProfile> result = downloader.collectAccountWorksInfo(text);
-      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
-    } catch (Exception e) {
-      Log.d(TAG, "TikTok account probe failed for " + text, e);
-      return ProbeResult.empty(CardType.COLLECTION);
-    }
-  }
-
-  private ProbeResult probeMix(String text, TikTokDownloader downloader) {
-    try {
-      List<AwemeProfile> result = downloader.collectMixWorksInfo(text);
-      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
-    } catch (Exception e) {
-      Log.d(TAG, "TikTok mix probe failed for " + text, e);
-      return ProbeResult.empty(CardType.COLLECTION);
-    }
-  }
-
-  private ProbeResult probeWork(String text, TikTokDownloader downloader) {
-    try {
-      AwemeProfile result = downloader.collectWorkInfo(text);
-      return new ProbeResult(List.of(result), CardType.ALBUM);
-    } catch (Exception e) {
-      Log.d(TAG, "TikTok single work probe failed for " + text, e);
+      Log.d(TAG, failurePrefix + text, e);
       return ProbeResult.empty(CardType.ALBUM);
     }
   }
@@ -1259,6 +1227,21 @@ public class ResourceFragment extends Fragment
       case ALBUM -> 2;
       case COLLECTION -> 3;
     };
+  }
+
+  @FunctionalInterface
+  private interface ProfileListProbe {
+    List<AwemeProfile> load(String text) throws Exception;
+  }
+
+  @FunctionalInterface
+  private interface ProfileProbe {
+    AwemeProfile load(String text) throws Exception;
+  }
+
+  @FunctionalInterface
+  private interface ProbeTask {
+    ProbeResult run(LinkKind kind);
   }
 
   private record ProbeResult(List<AwemeProfile> profiles, CardType rootType) {

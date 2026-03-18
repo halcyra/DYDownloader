@@ -19,7 +19,7 @@ public class ResourceProbeRouterTest {
     assertTrue(plan.supported());
     assertEquals(Platform.TIKTOK, plan.platform());
     assertEquals(LinkKind.WORK, plan.kind());
-    assertEquals(List.of(LinkKind.ACCOUNT, LinkKind.MIX, LinkKind.WORK), plan.probeKinds());
+    assertEquals(List.of(LinkKind.WORK), plan.probeKinds());
   }
 
   @Test
@@ -30,6 +30,17 @@ public class ResourceProbeRouterTest {
     assertTrue(plan.supported());
     assertEquals(Platform.DOUYIN, plan.platform());
     assertEquals(LinkKind.ACCOUNT, plan.kind());
+    assertEquals(List.of(LinkKind.ACCOUNT), plan.probeKinds());
+  }
+
+  @Test
+  public void plan_keepsFallbackProbesForAmbiguousTiktokShortLinks() {
+    ResourceProbeRouter.Plan plan = ResourceProbeRouter.plan("https://vm.tiktok.com/ZM1234567/");
+
+    assertTrue(plan.supported());
+    assertEquals(Platform.TIKTOK, plan.platform());
+    assertEquals(LinkKind.WORK, plan.kind());
+    assertEquals(List.of(LinkKind.WORK, LinkKind.ACCOUNT, LinkKind.MIX), plan.probeKinds());
   }
 
   @Test

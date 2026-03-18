@@ -49,10 +49,7 @@ public final class StorageReferenceUtils {
   }
 
   public static File buildPublicDownloadDirectoryFile(@Nullable String relativeDir) {
-    File rootDirectory =
-        new File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME);
+    File rootDirectory = publicDownloadsRootDirectory();
     String normalizedRelativeDir = normalizeRelativeDir(relativeDir);
     return normalizedRelativeDir.isBlank()
         ? rootDirectory
@@ -217,10 +214,7 @@ public final class StorageReferenceUtils {
       return "";
     }
 
-    File downloadsRoot =
-        new File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME);
+    File downloadsRoot = publicDownloadsRootDirectory();
     String rootPath = downloadsRoot.getAbsolutePath().replace('\\', '/');
     String directoryPath = directory.getAbsolutePath().replace('\\', '/');
     if (!directoryPath.startsWith(rootPath)) {
@@ -249,5 +243,13 @@ public final class StorageReferenceUtils {
       normalized = normalized.substring(0, normalized.length() - 1);
     }
     return normalizeRelativeDir(normalized);
+  }
+
+  public static File publicDownloadsRootDirectory() {
+    // Keep using the shared public Downloads root so existing visible storage paths remain
+    // unchanged.
+    return new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME);
   }
 }

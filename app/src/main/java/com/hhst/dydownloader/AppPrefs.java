@@ -99,7 +99,8 @@ public final class AppPrefs {
       return;
     }
 
-    editor.putString(encryptedCookieKey(platform), encryptedCookie)
+    editor
+        .putString(encryptedCookieKey(platform), encryptedCookie)
         .remove(cookieStorageKey(platform))
         .apply();
   }
@@ -130,8 +131,7 @@ public final class AppPrefs {
       return false;
     }
     boolean hasAuthField = hasAuthenticatedCookieValue(platform, normalizedCookie);
-    boolean hasRequestField =
-        hasAnyCookieField(normalizedCookie, cookieRequestFields(platform));
+    boolean hasRequestField = hasAnyCookieField(normalizedCookie, cookieRequestFields(platform));
     return hasAuthField || hasRequestField;
   }
 

@@ -7,7 +7,6 @@ import com.hhst.dydownloader.db.DownloadTaskEntity;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -21,7 +20,6 @@ import java.util.concurrent.Future;
 public final class DownloadQueue {
 
   private static final List<DownloadTask> TASKS = new ArrayList<>();
-  private static final Map<String, DownloadTask> TASK_MAP = new HashMap<>();
   private static final Set<Listener> LISTENERS = new HashSet<>();
   private static final ExecutorService DB_EXECUTOR =
       Executors.newSingleThreadExecutor(
@@ -45,18 +43,14 @@ public final class DownloadQueue {
       return;
     }
     initialized = true;
-    runDbTaskBlocking(DownloadQueue::restorePersistedTasks);
+    runRestoreTaskBlocking(DownloadQueue::restorePersistedTasks);
     if (peekNextQueuedTask() != null) {
       DownloadManager.getInstance().onQueueUpdated();
     }
   }
 
   public static synchronized List<DownloadTask> getTasks() {
-    List<DownloadTask> snapshot = new ArrayList<>(TASKS.size());
-    for (DownloadTask task : TASKS) {
-      snapshot.add(task.copy());
-    }
-    return snapshot;
+    return copyTasks(TASKS);
   }
 
   static synchronized DownloadTask peekNextQueuedTask() {
@@ -96,14 +90,11 @@ public final class DownloadQueue {
         continue;
       }
       String resourceKey = item.key();
-      if (resourceKey == null
-          || resourceKey.isBlank()
-          || existingResourceKeys.contains(resourceKey)) {
+      if (resourceKey.isBlank() || existingResourceKeys.contains(resourceKey)) {
         continue;
       }
       DownloadTask task = new DownloadTask(item);
       TASKS.add(task);
-      TASK_MAP.put(task.getKey(), task);
       persistTaskAsync(task);
       existingResourceKeys.add(resourceKey);
       added++;
@@ -141,7 +132,6 @@ public final class DownloadQueue {
 
   public static synchronized void removeTask(DownloadTask task) {
     if (task != null) {
-      TASK_MAP.remove(task.getKey());
       TASKS.removeIf(existing -> existing.getKey().equals(task.getKey()));
       deletePersistedTaskAsync(task.getKey());
       notifyListeners();
@@ -176,7 +166,6 @@ public final class DownloadQueue {
         continue;
       }
       iterator.remove();
-      TASK_MAP.remove(existing.getKey());
       removedTaskKeys.add(existing.getKey());
       changed = true;
     }
@@ -208,7 +197,6 @@ public final class DownloadQueue {
         continue;
       }
       iterator.remove();
-      TASK_MAP.remove(existing.getKey());
       removedTaskKeys.add(existing.getKey());
       changed = true;
     }
@@ -238,44 +226,28 @@ public final class DownloadQueue {
   }
 
   private static void notifyListeners() {
-    List<DownloadTask> snapshot = new ArrayList<>(TASKS.size());
-    for (DownloadTask task : TASKS) {
-      snapshot.add(task.copy());
-    }
+    List<DownloadTask> snapshot = copyTasks(TASKS);
     for (Listener listener : LISTENERS) {
       listener.onQueueChanged(snapshot);
     }
   }
 
   private static void restorePersistedTasks() {
-    TASKS.clear();
-    TASK_MAP.clear();
+    clearInMemoryQueue();
     if (downloadTaskDao == null) {
       return;
     }
 
-    List<DownloadTaskEntity> entities = downloadTaskDao.getAll();
-    Map<String, DownloadTask> restoredTasks = new LinkedHashMap<>();
-    List<String> obsoleteTaskKeys = new ArrayList<>();
-    for (DownloadTaskEntity entity : entities) {
-      DownloadTask task = entity.toTask();
-      if (task.getStatus() == DownloadTask.Status.DOWNLOADING) {
-        task.setStatus(DownloadTask.Status.QUEUED);
-        task.setProgress(0);
-        task.setError(null);
-      }
-      DownloadTask previousTask = restoredTasks.put(task.getResourceKey(), task);
-      if (previousTask != null && !previousTask.getKey().equals(task.getKey())) {
-        obsoleteTaskKeys.add(previousTask.getKey());
-      }
-    }
-    for (DownloadTask task : restoredTasks.values()) {
+    RestorePlan plan = buildRestorePlan(downloadTaskDao.getAll());
+    for (DownloadTask task : plan.tasks()) {
       TASKS.add(task);
-      TASK_MAP.put(task.getKey(), task);
       persistTask(task);
     }
-    for (String obsoleteTaskKey : obsoleteTaskKeys) {
+    for (String obsoleteTaskKey : plan.obsoleteTaskKeys()) {
       deletePersistedTask(obsoleteTaskKey);
+    }
+    for (String invalidTaskKey : plan.invalidTaskKeys()) {
+      deletePersistedTask(invalidTaskKey);
     }
   }
 
@@ -307,16 +279,83 @@ public final class DownloadQueue {
     DB_EXECUTOR.execute(() -> deletePersistedTask(taskKey));
   }
 
-  private static void runDbTaskBlocking(Runnable task) {
-    if (task == null) {
-      return;
+  private static void clearInMemoryQueue() {
+    TASKS.clear();
+  }
+
+  static boolean runRestoreTaskBlocking(Runnable restoreTask) {
+    if (restoreTask == null) {
+      return true;
     }
-    Future<?> future = DB_EXECUTOR.submit(task);
+    Future<?> future = DB_EXECUTOR.submit(restoreTask);
     try {
       future.get();
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to restore persisted download queue", e);
+      return true;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return clearFailedRestore();
+    } catch (Exception ignored) {
+      return clearFailedRestore();
     }
+  }
+
+  static RestorePlan buildRestorePlan(List<DownloadTaskEntity> entities) {
+    Map<String, DownloadTask> restoredTasks = new LinkedHashMap<>();
+    List<String> obsoleteTaskKeys = new ArrayList<>();
+    List<String> invalidTaskKeys = new ArrayList<>();
+    if (entities == null || entities.isEmpty()) {
+      return new RestorePlan(List.of(), List.of(), List.of());
+    }
+    for (DownloadTaskEntity entity : entities) {
+      DownloadTask task = restoreTaskSafely(entity, invalidTaskKeys);
+      if (task == null) {
+        continue;
+      }
+      DownloadTask previousTask = restoredTasks.put(task.getResourceKey(), task);
+      if (previousTask != null && !previousTask.getKey().equals(task.getKey())) {
+        obsoleteTaskKeys.add(previousTask.getKey());
+      }
+    }
+    return new RestorePlan(
+        new ArrayList<>(restoredTasks.values()), obsoleteTaskKeys, invalidTaskKeys);
+  }
+
+  private static DownloadTask restoreTaskSafely(
+      DownloadTaskEntity entity, List<String> invalidTaskKeys) {
+    if (entity == null) {
+      return null;
+    }
+    try {
+      DownloadTask task = entity.toTask();
+      return resetInterruptedTask(task);
+    } catch (Exception ignored) {
+      if (!entity.taskKey.isBlank()) {
+        invalidTaskKeys.add(entity.taskKey);
+      }
+      return null;
+    }
+  }
+
+  private static boolean clearFailedRestore() {
+    clearInMemoryQueue();
+    return false;
+  }
+
+  private static DownloadTask resetInterruptedTask(DownloadTask task) {
+    if (task.getStatus() == DownloadTask.Status.DOWNLOADING) {
+      task.setStatus(DownloadTask.Status.QUEUED);
+      task.setProgress(0);
+      task.setError(null);
+    }
+    return task;
+  }
+
+  private static List<DownloadTask> copyTasks(List<DownloadTask> tasks) {
+    List<DownloadTask> snapshot = new ArrayList<>(tasks.size());
+    for (DownloadTask task : tasks) {
+      snapshot.add(task.copy());
+    }
+    return snapshot;
   }
 
   static Set<String> collectKeysByStatuses(
@@ -391,4 +430,7 @@ public final class DownloadQueue {
   public interface Listener {
     void onQueueChanged(List<DownloadTask> tasks);
   }
+
+  record RestorePlan(
+      List<DownloadTask> tasks, List<String> obsoleteTaskKeys, List<String> invalidTaskKeys) {}
 }

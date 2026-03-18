@@ -1166,7 +1166,7 @@ public final class DouyinDownloader {
 
   private String urlEncode(String value) {
     try {
-      return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8)
+      return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8.name())
           .replace("+", "%20");
     } catch (Exception e) {
       return value == null ? "" : value;
@@ -1178,7 +1178,7 @@ public final class DouyinDownloader {
       return "";
     }
     try {
-      return URLDecoder.decode(value, StandardCharsets.UTF_8);
+      return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
     } catch (Exception ignored) {
       return value;
     }

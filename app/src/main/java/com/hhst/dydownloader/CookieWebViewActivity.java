@@ -9,15 +9,15 @@ import android.os.Bundle;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import com.hhst.dydownloader.databinding.ActivityCookieWebviewBinding;
 import com.hhst.dydownloader.cookies.CookiePlatformConfig;
+import com.hhst.dydownloader.databinding.ActivityCookieWebviewBinding;
 import com.hhst.dydownloader.model.Platform;
 
 public class CookieWebViewActivity extends AppCompatActivity {
@@ -77,11 +77,6 @@ public class CookieWebViewActivity extends AppCompatActivity {
           }
 
           @Override
-          public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            return shouldOpenExternally(url == null ? null : Uri.parse(url));
-          }
-
-          @Override
           public void onPageStarted(WebView view, String url, Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
             binding.progressBar.setVisibility(View.VISIBLE);
@@ -137,7 +132,7 @@ public class CookieWebViewActivity extends AppCompatActivity {
   }
 
   private void saveCookies() {
-    if (binding != null && binding.webView != null) {
+    if (binding != null) {
       CookieManager cookieManager = CookieManager.getInstance();
       String currentUrl = binding.webView.getUrl();
       String cookie = cookieManager.getCookie(config.cookieUrl());
@@ -164,24 +159,27 @@ public class CookieWebViewActivity extends AppCompatActivity {
       return false;
     }
     try {
-      Intent externalIntent;
-      if ("intent".equalsIgnoreCase(scheme)) {
-        externalIntent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME);
-        String fallbackUrl = externalIntent.getStringExtra("browser_fallback_url");
-        if ((externalIntent.getPackage() == null
-                || externalIntent.resolveActivity(getPackageManager()) == null)
-            && fallbackUrl != null
-            && !fallbackUrl.isBlank()) {
-          binding.webView.loadUrl(fallbackUrl);
-          return true;
-        }
-      } else {
-        externalIntent = new Intent(Intent.ACTION_VIEW, uri);
-      }
+      Intent externalIntent =
+          "intent".equalsIgnoreCase(scheme)
+              ? Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+              : new Intent(Intent.ACTION_VIEW, uri);
       externalIntent.addCategory(Intent.CATEGORY_BROWSABLE);
       startActivity(externalIntent);
       return true;
     } catch (ActivityNotFoundException | java.net.URISyntaxException ignored) {
+      if (!"intent".equalsIgnoreCase(scheme)) {
+        return false;
+      }
+      try {
+        Intent parsedIntent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME);
+        String fallbackUrl = parsedIntent.getStringExtra("browser_fallback_url");
+        if (fallbackUrl != null && !fallbackUrl.isBlank()) {
+          binding.webView.loadUrl(fallbackUrl);
+          return true;
+        }
+      } catch (java.net.URISyntaxException ignoredAgain) {
+        // Ignore and fall through.
+      }
       return false;
     }
   }

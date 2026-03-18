@@ -7,7 +7,14 @@ import com.hhst.dydownloader.model.Platform;
 public class Converters {
   @TypeConverter
   public static CardType fromString(String value) {
-    return value == null ? null : CardType.valueOf(value);
+    if (value == null) {
+      return null;
+    }
+    try {
+      return CardType.valueOf(value);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   @TypeConverter
@@ -17,7 +24,14 @@ public class Converters {
 
   @TypeConverter
   public static Platform platformFromString(String value) {
-    return value == null ? null : Platform.valueOf(value);
+    if (value == null) {
+      return null;
+    }
+    try {
+      return Platform.valueOf(value);
+    } catch (IllegalArgumentException ignored) {
+      return null;
+    }
   }
 
   @TypeConverter

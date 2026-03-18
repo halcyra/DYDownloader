@@ -17,6 +17,9 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class TikTokDownloaderTest {
+  private static final String WORK_ITEM_ID = "7345678901234567890";
+  private static final String WORK_PATH = "/@creator/video/" + WORK_ITEM_ID;
+  private static final String SHORT_WORK_SHARE_URL = "https://vt.tiktok.com/ZSuXJ91x8/";
 
   @Test
   public void trustedShareUrl_onlyAllowsTikTokHosts() {
@@ -106,6 +109,35 @@ public class TikTokDownloaderTest {
     assertEquals(1, profiles.size());
     assertEquals("7345678901234567890", profiles.get(0).awemeId());
     assertEquals("Collection title", profiles.get(0).collectionTitle());
+  }
+
+  @Test
+  public void collectWorkInfo_readsItemStructFromHtmlFallbackWhenDetailPayloadIsEmpty()
+      throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildWorkClientUsingHtmlFallback(), "msToken=base");
+
+    AwemeProfile profile =
+        downloader.collectWorkInfo("https://www.tiktok.com/@creator/video/" + WORK_ITEM_ID, "msToken=base");
+
+    assertEquals(WORK_ITEM_ID, profile.awemeId());
+    assertEquals(Platform.TIKTOK, profile.platform());
+    assertEquals(MediaType.VIDEO, profile.mediaType());
+    assertEquals("work-desc", profile.desc());
+  }
+
+  @Test
+  public void collectWorkInfo_readsItemStructFromHtmlWhenShortLinkHasNoResolvableDeviceId()
+      throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildShortLinkWorkClientWithoutDeviceId(), "msToken=base");
+
+    AwemeProfile profile = downloader.collectWorkInfo(SHORT_WORK_SHARE_URL, "msToken=base");
+
+    assertEquals(WORK_ITEM_ID, profile.awemeId());
+    assertEquals(Platform.TIKTOK, profile.platform());
+    assertEquals(MediaType.VIDEO, profile.mediaType());
+    assertEquals("work-desc", profile.desc());
   }
 
   private static OkHttpClient buildAccountClient() {
@@ -265,6 +297,71 @@ public class TikTokDownloaderTest {
               throw new IOException("Unexpected URL: " + url);
             })
         .build();
+  }
+
+  private static OkHttpClient buildWorkClientUsingHtmlFallback() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/api/item/detail/".equals(encodedPath)) {
+                return response(request, 200, "application/json", "{\"itemInfo\":{}}");
+              }
+              if (WORK_PATH.equals(encodedPath)) {
+                return workPageResponse(request);
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildShortLinkWorkClientWithoutDeviceId() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("vt.tiktok.com".equals(request.url().host())
+                  && "/ZSuXJ91x8/".equals(encodedPath)) {
+                Request finalRequest =
+                    request.newBuilder().url("https://www.tiktok.com" + WORK_PATH).build();
+                return response(finalRequest, 200, "text/html", "");
+              }
+              if ("/explore".equals(encodedPath)) {
+                return response(request, 200, "text/html", "<html>missing-wid</html>");
+              }
+              if ("/api/item/detail/".equals(encodedPath)) {
+                throw new IOException("Detail API should not be called when HTML already contains the item");
+              }
+              if (WORK_PATH.equals(encodedPath)) {
+                return workPageResponse(request);
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static Response workPageResponse(Request request) {
+    return response(request, 200, "text/html", workPageHtml("work-desc"));
+  }
+
+  private static String workPageHtml(String desc) {
+    return "<script>window.__UNIVERSAL_DATA_FOR_REHYDRATION__={\"itemStruct\":"
+        + accountVideoItem(WORK_ITEM_ID).replace("video-" + WORK_ITEM_ID, desc)
+        + "}</script>";
   }
 
   private static Response response(Request request, int code, String contentType, String body) {

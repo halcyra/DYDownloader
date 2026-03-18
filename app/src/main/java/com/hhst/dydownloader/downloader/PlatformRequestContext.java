@@ -11,8 +11,7 @@ public record PlatformRequestContext(
     userAgent = userAgent == null ? "" : userAgent.trim();
     referer = referer == null ? "" : referer.trim();
     cookie = cookie == null ? "" : cookie.trim();
-    cookieHostSuffixes =
-        cookieHostSuffixes == null ? List.of() : List.copyOf(cookieHostSuffixes);
+    cookieHostSuffixes = cookieHostSuffixes == null ? List.of() : List.copyOf(cookieHostSuffixes);
   }
 
   public boolean shouldAttachCookie(String url) {

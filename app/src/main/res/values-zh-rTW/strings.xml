@@ -16,7 +16,9 @@
     <string name="download_status_downloading">下載中 %1$d%%</string>
     <string name="download_status_completed">已完成</string>
     <string name="download_status_failed_short">失敗</string>
+    <string name="download_error_label">錯誤：</string>
     <string name="download_error_summary">錯誤：%1$s</string>
+    <string name="download_save_path_label">保存到：</string>
     <string name="download_save_path">保存到：%1$s</string>
     <string name="download_path_copied">路徑已複製到剪貼簿</string>
     <string name="download_error_unknown">未知錯誤</string>

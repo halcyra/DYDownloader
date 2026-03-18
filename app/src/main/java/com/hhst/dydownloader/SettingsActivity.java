@@ -130,7 +130,9 @@ public class SettingsActivity extends AppCompatActivity {
     int statusResId =
         hasAuthenticated
             ? R.string.settings_status_set
-            : hasConfigured ? R.string.settings_status_request_only : R.string.settings_status_unset;
+            : hasConfigured
+                ? R.string.settings_status_request_only
+                : R.string.settings_status_unset;
     cookieStatus.setText(statusResId);
   }
 }

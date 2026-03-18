@@ -34,7 +34,9 @@ public final class SourceKeyUtils {
     }
     String leftPlatform = platformPrefix(left);
     String rightPlatform = platformPrefix(right);
-    if (!leftPlatform.isEmpty() && !rightPlatform.isEmpty() && !leftPlatform.equals(rightPlatform)) {
+    if (!leftPlatform.isEmpty()
+        && !rightPlatform.isEmpty()
+        && !leftPlatform.equals(rightPlatform)) {
       return false;
     }
     String leftBase = baseOf(left);
