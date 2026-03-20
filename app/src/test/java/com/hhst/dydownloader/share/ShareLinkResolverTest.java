@@ -45,4 +45,24 @@ public class ShareLinkResolverTest {
     assertEquals(LinkKind.MIX, result.kind());
     assertTrue(result.supported());
   }
+
+  @Test
+  public void resolve_detectsTiktokPlaylistQueryLinks() {
+    ShareLinkResolver.Result result =
+        ShareLinkResolver.resolve("https://www.tiktok.com/@creator?playlistId=7345678901234567890");
+
+    assertEquals(Platform.TIKTOK, result.platform());
+    assertEquals(LinkKind.MIX, result.kind());
+    assertTrue(result.supported());
+  }
+
+  @Test
+  public void resolve_detectsTiktokLowercaseCollectionIdQueryLinks() {
+    ShareLinkResolver.Result result =
+        ShareLinkResolver.resolve("https://www.tiktok.com/@creator?collectionid=7345678901234567890");
+
+    assertEquals(Platform.TIKTOK, result.platform());
+    assertEquals(LinkKind.MIX, result.kind());
+    assertTrue(result.supported());
+  }
 }

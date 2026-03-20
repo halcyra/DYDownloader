@@ -31,13 +31,12 @@ import com.hhst.dydownloader.share.ShareLinkResolver;
 import com.hhst.dydownloader.share.ShareLinkResolver.LinkKind;
 import com.hhst.dydownloader.tiktok.TikTokDownloader;
 import com.hhst.dydownloader.util.MediaSourceUtils;
-import com.hhst.dydownloader.util.StoragePathUtils;
 import com.hhst.dydownloader.util.StorageReferenceUtils;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -56,8 +55,10 @@ public class ResourceFragment extends Fragment
   private static final String STATE_REFERRER = "state_referrer";
   private static final String STATE_SHARE_LINK = "state_share_link";
   private static final String STATE_RESOURCE_ID = "state_resource_id";
+  private static final String STATE_RESOURCE_SNAPSHOT = "state_resource_snapshot";
   private static final String ARG_SCREEN_KEY = "screen_key";
   private static final String ARG_RESOURCE_ID = "resource_id";
+  private static final String ARG_RESOURCE_SNAPSHOT = "resource_snapshot";
 
   private final Set<String> selectedKeys = new HashSet<>();
   private final AtomicBoolean destroyed = new AtomicBoolean(false);
@@ -68,6 +69,7 @@ public class ResourceFragment extends Fragment
   private List<ResourceItem> resourceList = new ArrayList<>();
   private String title, referrer = ResourceActivity.REFERRER_RESOURCE;
   private String screenKey;
+  private String snapshotToken;
   private ResourceAdapter adapter;
   private View actionBar, btnToggleSelectAll, btnDownload, loadingProgress;
   private String shareLink;
@@ -121,6 +123,9 @@ public class ResourceFragment extends Fragment
       referrer = savedInstanceState.getString(STATE_REFERRER, ResourceActivity.REFERRER_RESOURCE);
       shareLink = savedInstanceState.getString(STATE_SHARE_LINK);
       resourceId = savedInstanceState.getLong(STATE_RESOURCE_ID, -1L);
+      snapshotToken = savedInstanceState.getString(STATE_RESOURCE_SNAPSHOT);
+      resourceList =
+          restoreResourceList(screenKey, snapshotToken);
     } else if (getArguments() != null) {
       screenKey = getArguments().getString(ARG_SCREEN_KEY);
       title = getArguments().getString("title");
@@ -129,8 +134,15 @@ public class ResourceFragment extends Fragment
               .getString(ResourceActivity.EXTRA_REFERRER, ResourceActivity.REFERRER_RESOURCE);
       shareLink = getArguments().getString("share_link");
       resourceId = getArguments().getLong(ARG_RESOURCE_ID, -1L);
+      snapshotToken = getArguments().getString(ARG_RESOURCE_SNAPSHOT);
+      resourceList = restoreResourceList(screenKey, snapshotToken);
     }
-    resourceList = ResourceScreenStore.get(screenKey);
+    if (resourceList == null) {
+      resourceList = new ArrayList<>();
+    }
+    if (shouldPersistResourceSnapshot()) {
+      persistResourceSnapshot();
+    }
     loadExecutor =
         Executors.newFixedThreadPool(
             3,
@@ -156,6 +168,10 @@ public class ResourceFragment extends Fragment
     outState.putString(STATE_REFERRER, referrer);
     outState.putString(STATE_SHARE_LINK, shareLink);
     outState.putLong(STATE_RESOURCE_ID, resourceId);
+    String persistedSnapshotToken = persistResourceSnapshot();
+    if (!persistedSnapshotToken.isBlank()) {
+      outState.putString(STATE_RESOURCE_SNAPSHOT, persistedSnapshotToken);
+    }
   }
 
   @Override
@@ -461,14 +477,12 @@ public class ResourceFragment extends Fragment
           title = finalTitle;
 
           selectedKeys.clear();
-          shareLink = null;
           screenKey = ResourceScreenStore.replace(screenKey, resourceList);
 
           Bundle args = getArguments();
           if (args != null) {
             args.putString(ARG_SCREEN_KEY, screenKey);
             args.putString("title", title);
-            args.putString("share_link", null);
           }
 
           if (getActivity() instanceof ResourceActivity) {
@@ -496,21 +510,15 @@ public class ResourceFragment extends Fragment
         return collectionTitle;
       }
     }
-    String commonNickname = resolveCommonAuthorNickname(allProfiles);
+    String commonNickname = ResourceScreenSupport.resolveAccountTitle(allProfiles, "");
     return commonNickname.isBlank()
         ? getString(R.string.resource_collected_resources)
         : commonNickname;
   }
 
   private String resolveDownloadGroupDir(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    LinkKind shareKind = resolveShareLinkKind();
-    if (shareKind == LinkKind.MIX) {
-      return StoragePathUtils.joinSegments(resolveCollectionTitle(allProfiles, fallbackTitle));
-    }
-    if (shareKind == LinkKind.ACCOUNT) {
-      return StoragePathUtils.joinSegments(resolveAccountTitle(allProfiles, fallbackTitle));
-    }
-    return "";
+    return ResourceScreenSupport.resolveDownloadGroupDir(
+        resolveShareLinkKind(), allProfiles, fallbackTitle);
   }
 
   private LinkKind resolveShareLinkKind() {
@@ -522,40 +530,11 @@ public class ResourceFragment extends Fragment
   }
 
   private String resolveCollectionTitle(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    if (allProfiles != null) {
-      for (AwemeProfile profile : allProfiles) {
-        if (profile != null
-            && profile.collectionTitle() != null
-            && !profile.collectionTitle().isBlank()) {
-          return profile.collectionTitle().trim();
-        }
-      }
-    }
-    return fallbackTitle == null ? "" : fallbackTitle.trim();
+    return ResourceScreenSupport.resolveCollectionTitle(allProfiles, fallbackTitle);
   }
 
   private String resolveAccountTitle(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    String commonNickname = resolveCommonAuthorNickname(allProfiles);
-    if (!commonNickname.isBlank()) {
-      return commonNickname;
-    }
-    return fallbackTitle == null ? "" : fallbackTitle.trim();
-  }
-
-  private String resolveCommonAuthorNickname(List<AwemeProfile> allProfiles) {
-    if (allProfiles == null || allProfiles.isEmpty()) {
-      return "";
-    }
-    String commonNickname = allProfiles.get(0).authorNickname();
-    if (commonNickname == null || commonNickname.isBlank()) {
-      return "";
-    }
-    for (AwemeProfile profile : allProfiles) {
-      if (!Objects.equals(profile.authorNickname(), commonNickname)) {
-        return "";
-      }
-    }
-    return commonNickname.trim();
+    return ResourceScreenSupport.resolveAccountTitle(allProfiles, fallbackTitle);
   }
 
   private void showLoadFailed(int generation, String message) {
@@ -1088,6 +1067,44 @@ public class ResourceFragment extends Fragment
       return item.storageDir();
     }
     return "";
+  }
+
+  private ArrayList<ResourceItem> restoreResourceList(String currentScreenKey, String token) {
+    ArrayList<ResourceItem> storedItems = ResourceScreenStore.get(currentScreenKey);
+    if (!storedItems.isEmpty()) {
+      return storedItems;
+    }
+    ArrayList<ResourceItem> snapshotItems =
+        ResourceScreenSnapshot.restore(getSnapshotDirectory(), token);
+    if (!snapshotItems.isEmpty()) {
+      screenKey = ResourceScreenStore.replace(currentScreenKey, snapshotItems);
+    }
+    return snapshotItems;
+  }
+
+  private boolean shouldPersistResourceSnapshot() {
+    return ResourceScreenSupport.shouldPersistSnapshot(resourceId, resourceList);
+  }
+
+  private String persistResourceSnapshot() {
+    if (!shouldPersistResourceSnapshot()) {
+      return "";
+    }
+    snapshotToken =
+        ResourceScreenSnapshot.persist(
+            getSnapshotDirectory(), snapshotToken == null ? screenKey : snapshotToken, resourceList);
+    if (snapshotToken == null || snapshotToken.isBlank()) {
+      return "";
+    }
+    Bundle args = getArguments();
+    if (args != null) {
+      args.putString(ARG_RESOURCE_SNAPSHOT, snapshotToken);
+    }
+    return snapshotToken;
+  }
+
+  private File getSnapshotDirectory() {
+    return new File(requireContext().getCacheDir(), "resource-screen-snapshots");
   }
 
   private void applyQueueState(List<DownloadTask> tasks, boolean forceDownloadedRefresh) {

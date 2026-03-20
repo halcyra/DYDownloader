@@ -29,7 +29,7 @@ public class DownloadTask {
 
   private static String resolveTaskId(ResourceItem resourceItem) {
     String resourceKey = resourceItem != null ? resourceItem.key() : "";
-    return resourceKey == null || resourceKey.isBlank()
+    return resourceKey.isBlank()
         ? UUID.randomUUID().toString()
         : resourceKey;
   }

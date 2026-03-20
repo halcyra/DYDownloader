@@ -1,7 +1,11 @@
 *.iml
 .gradle
 .gradle-user-home
+/.android/
+/.android-home/
 .android-user-home
+/.fdroiddata/
+/.worktrees/
 /local.properties
 /.idea/
 /.vscode/
@@ -10,13 +14,14 @@
 /.classpath
 /.claude/
 /.sisyphus/
+/docs/
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
 hs_err_pid*.log
+/gcm-diagnose.log
 app/build/
 app/release/
 app/.settings/

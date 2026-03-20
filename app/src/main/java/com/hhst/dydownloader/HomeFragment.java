@@ -317,6 +317,8 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
       if (searchInput != null) {
         searchInput.setText("");
       }
+    }
+    if (shouldRefreshDisplayAfterExit(clearText)) {
       updateDisplayList();
     }
     clearSearchInputFocus();
@@ -325,6 +327,10 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
     if (searchContainer != null) {
       searchContainer.setVisibility(View.GONE);
     }
+  }
+
+  boolean shouldRefreshDisplayAfterExit(boolean clearText) {
+    return true;
   }
 
   @Override
@@ -394,6 +400,9 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   }
 
   private void updateDisplayList() {
+    String activeQuery =
+        HomeSearchBehavior.effectiveQuery(
+            searchMode, searchInput == null ? null : searchInput.getText(), searchText);
     Comparator<ResourceItem> comparator =
         switch (sortType) {
           case 1 -> Comparator.comparing(ResourceItem::createTime);
@@ -408,7 +417,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
                 item ->
                     item.text()
                         .toLowerCase(Locale.getDefault())
-                        .contains(searchText.toLowerCase(Locale.getDefault())))
+                        .contains(activeQuery.toLowerCase(Locale.getDefault())))
             .filter(item -> filterType == null || item.type() == filterType)
             .sorted(comparator)
             .collect(Collectors.toList());

@@ -1,5 +1,6 @@
 package com.hhst.dydownloader.adapter;
 
+import android.content.Context;
 import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -8,6 +9,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import com.hhst.dydownloader.R;
@@ -125,13 +127,24 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
         });
 
     if (!isFromReferrer) {
+      Context context = holder.checkContainer.getContext();
       boolean isDownloaded = selectionState != null && selectionState.isDownloaded(item);
       boolean isQueued = selectionState != null && selectionState.isQueued(item);
       boolean isSelected =
           isDownloaded || (selectionState != null && selectionState.isSelected(item));
       boolean unavailable = isQueued || isDownloaded;
+      String stateDescription =
+          context.getString(
+              unavailable
+                  ? R.string.resource_check_disabled_state
+                  : isSelected
+                      ? R.string.resource_check_selected_state
+                      : R.string.resource_check_unselected_state);
 
       holder.checkContainer.setVisibility(View.VISIBLE);
+      ViewCompat.setStateDescription(holder.checkContainer, stateDescription);
+      holder.checkContainer.setContentDescription(
+          context.getString(R.string.resource_check_container_desc));
       holder.checkIcon.setVisibility(isSelected ? View.VISIBLE : View.INVISIBLE);
       holder.checkContainer.setAlpha(unavailable ? 0.48f : 1f);
       holder.checkContainer.setEnabled(!unavailable);

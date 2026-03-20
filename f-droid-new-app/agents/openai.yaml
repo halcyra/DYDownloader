@@ -1,0 +1,4 @@
+interface:
+  display_name: "F-Droid New App"
+  short_description: "Prepare and submit a new Android app to F-Droid"
+  default_prompt: "Use $f-droid-new-app to prepare and submit this Android app to F-Droid."

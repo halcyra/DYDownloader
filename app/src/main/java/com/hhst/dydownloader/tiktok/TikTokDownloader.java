@@ -95,7 +95,10 @@ public final class TikTokDownloader {
       return false;
     }
     String normalized = text.toLowerCase(Locale.ROOT);
-    return normalized.contains("/collection/") || normalized.contains("/playlist/");
+    return normalized.contains("/collection/")
+        || normalized.contains("/playlist/")
+        || normalized.contains("collectionid=")
+        || normalized.contains("playlistid=");
   }
 
   private static OkHttpClient defaultClient() {
@@ -187,7 +190,8 @@ public final class TikTokDownloader {
     String secUid =
         resolveSecUid(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
     DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
-    List<JsonNode> items = fetchAccountItemList(secUid, deviceContext.cookie());
+    List<JsonNode> items =
+        fetchAccountItemList(secUid, deviceContext.deviceId(), deviceContext.cookie());
     return mapItemList(items);
   }
 
@@ -205,7 +209,8 @@ public final class TikTokDownloader {
     String collectionId =
         resolveCollectionId(mixShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
     DeviceCookieContext deviceContext = ensureDeviceId(resolved.normalizedCookie());
-    List<JsonNode> items = fetchCollectionItemList(collectionId, deviceContext.cookie());
+    List<JsonNode> items =
+        fetchCollectionItemList(collectionId, deviceContext.deviceId(), deviceContext.cookie());
     return mapItemList(items);
   }
 
@@ -238,7 +243,8 @@ public final class TikTokDownloader {
     }
   }
 
-  private DeviceCookieContext ensureDeviceId(String cookie) throws TikTokDetailFetchException {
+  private synchronized DeviceCookieContext ensureDeviceId(String cookie)
+      throws TikTokDetailFetchException {
     String normalizedCookie = normalizeCookie(cookie);
     String mergedCookie = mergeCookies(normalizedCookie, cachedCookieAdditions);
     String deviceId = cachedDeviceId;
@@ -268,19 +274,21 @@ public final class TikTokDownloader {
       return itemFromHtml.get();
     }
     DeviceCookieContext deviceContext = ensureDeviceId(cookie);
-    return fetchItemDetail(itemId, deviceContext.cookie());
+    return fetchItemDetail(itemId, deviceContext);
   }
 
-  private JsonNode fetchItemDetail(String itemId, String cookie) throws TikTokDetailFetchException {
-    String msToken = extractCookieField(cookie, "msToken");
+  private JsonNode fetchItemDetail(String itemId, DeviceCookieContext deviceContext)
+      throws TikTokDetailFetchException {
+    String msToken = extractCookieField(deviceContext.cookie(), "msToken");
     Map<String, String> params = buildBaseParams();
     params.put("itemId", itemId);
-    String query = requestSigner.sign(params, DEFAULT_USER_AGENT, cachedDeviceId, msToken);
+    String query =
+        requestSigner.sign(params, DEFAULT_USER_AGENT, deviceContext.deviceId(), msToken);
     String apiUrl = DETAIL_API + "?" + query;
 
     try {
       Request request =
-          requestBuilder(apiUrl, cookie)
+          requestBuilder(apiUrl, deviceContext.cookie())
               .get()
               .header("Accept", "application/json, text/plain, */*")
               .build();
@@ -340,7 +348,13 @@ public final class TikTokDownloader {
             TikTokLinkParser.extractCollectionId(resolvedUrl),
             TikTokLinkParser.extractCollectionId(sourceText),
             extractQueryValue(resolvedUrl, "collectionId"),
-            extractQueryValue(sourceText, "collectionId"));
+            extractQueryValue(sourceText, "collectionId"),
+            extractQueryValue(resolvedUrl, "collectionid"),
+            extractQueryValue(sourceText, "collectionid"),
+            extractQueryValue(resolvedUrl, "playlistId"),
+            extractQueryValue(sourceText, "playlistId"),
+            extractQueryValue(resolvedUrl, "playlistid"),
+            extractQueryValue(sourceText, "playlistid"));
     if (collectionId.isEmpty() && (isMixLink(resolvedUrl) || isMixLink(sourceText))) {
       collectionId = TikTokLinkParser.extractCollectionId(fetchPageHtml(resolvedUrl, cookie));
     }
@@ -389,7 +403,7 @@ public final class TikTokDownloader {
     }
   }
 
-  private List<JsonNode> fetchAccountItemList(String secUid, String cookie)
+  private List<JsonNode> fetchAccountItemList(String secUid, String deviceId, String cookie)
       throws TikTokWorkListFetchException {
     String cursor = "0";
     boolean hasMore = true;
@@ -408,7 +422,7 @@ public final class TikTokDownloader {
       params.put("needPinnedItemIds", "true");
       params.put("video_encoding", "mp4");
 
-      JsonNode pageData = fetchItemPage(ACCOUNT_LIST_API, params, cookie, "account");
+      JsonNode pageData = fetchItemPage(ACCOUNT_LIST_API, params, deviceId, cookie, "account");
       int newItems = appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "account");
       hasMore = parseHasMore(pageData.path("hasMore"));
       String nextCursor = parseCursor(pageData.path("cursor"), cursor);
@@ -426,7 +440,8 @@ public final class TikTokDownloader {
     return Collections.unmodifiableList(items);
   }
 
-  private List<JsonNode> fetchCollectionItemList(String collectionId, String cookie)
+  private List<JsonNode> fetchCollectionItemList(
+      String collectionId, String deviceId, String cookie)
       throws TikTokWorkListFetchException {
     String cursor = "0";
     boolean hasMore = true;
@@ -442,7 +457,8 @@ public final class TikTokDownloader {
       params.put("collectionId", collectionId);
       params.put("sourceType", "113");
 
-      JsonNode pageData = fetchItemPage(COLLECTION_LIST_API, params, cookie, "collection");
+      JsonNode pageData =
+          fetchItemPage(COLLECTION_LIST_API, params, deviceId, cookie, "collection");
       int newItems = appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "collection");
       hasMore = parseHasMore(pageData.path("hasMore"));
       String nextCursor = parseCursor(pageData.path("cursor"), cursor);
@@ -461,10 +477,10 @@ public final class TikTokDownloader {
   }
 
   private JsonNode fetchItemPage(
-      String apiUrl, Map<String, String> params, String cookie, String type)
+      String apiUrl, Map<String, String> params, String deviceId, String cookie, String type)
       throws TikTokWorkListFetchException {
     String msToken = extractCookieField(cookie, "msToken");
-    String query = requestSigner.sign(params, DEFAULT_USER_AGENT, cachedDeviceId, msToken);
+    String query = requestSigner.sign(params, DEFAULT_USER_AGENT, deviceId, msToken);
     try {
       Request request =
           requestBuilder(apiUrl + "?" + query, cookie)

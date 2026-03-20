@@ -16,6 +16,7 @@ import com.hhst.dydownloader.manager.DownloadQueue;
 import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.manager.SourceKeyUtils;
 import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import com.hhst.dydownloader.util.StorageReferenceUtils;
 import java.util.ArrayList;
@@ -248,7 +249,7 @@ public final class ResourceActions {
     }
 
     if (item.sourceKey() != null && !item.sourceKey().isBlank()) {
-      ResourceEntity bySourceKey = resourceDao.getBySourceKey(item.sourceKey());
+      ResourceEntity bySourceKey = getBySourceKey(resourceDao, item.platform(), item.sourceKey());
       if (bySourceKey != null) {
         return bySourceKey;
       }
@@ -263,7 +264,8 @@ public final class ResourceActions {
         markerIndex = liveMarkerIndex;
       }
       if (markerIndex > 0) {
-        return resourceDao.getBySourceKey(item.sourceKey().substring(0, markerIndex));
+        return getBySourceKey(
+            resourceDao, item.platform(), item.sourceKey().substring(0, markerIndex));
       }
     }
 
@@ -589,7 +591,8 @@ public final class ResourceActions {
     }
     String childSourceKey = safeText(child.sourceKey).trim();
     if (!childSourceKey.isBlank()) {
-      ResourceEntity bySourceKey = resourceDao.getByParentIdAndSourceKey(parentId, childSourceKey);
+      ResourceEntity bySourceKey =
+          getByParentIdAndSourceKey(resourceDao, parentId, child.platform, childSourceKey);
       if (bySourceKey != null) {
         return bySourceKey;
       }
@@ -819,9 +822,31 @@ public final class ResourceActions {
       }
     }
     if (item.sourceKey() != null && !item.sourceKey().isBlank()) {
-      return resourceDao.getBySourceKey(item.sourceKey());
+      return getBySourceKey(resourceDao, item.platform(), item.sourceKey());
     }
     return null;
+  }
+
+  @Nullable
+  private static ResourceEntity getBySourceKey(
+      @NonNull ResourceDao resourceDao, @Nullable Platform platform, @Nullable String sourceKey) {
+    if (sourceKey == null || sourceKey.isBlank()) {
+      return null;
+    }
+    return resourceDao.getBySourceKey(platform == null ? Platform.DOUYIN : platform, sourceKey);
+  }
+
+  @Nullable
+  private static ResourceEntity getByParentIdAndSourceKey(
+      @NonNull ResourceDao resourceDao,
+      long parentId,
+      @Nullable Platform platform,
+      @Nullable String sourceKey) {
+    if (sourceKey == null || sourceKey.isBlank()) {
+      return null;
+    }
+    return resourceDao.getByParentIdAndSourceKey(
+        parentId, platform == null ? Platform.DOUYIN : platform, sourceKey);
   }
 
   public record LocalMedia(

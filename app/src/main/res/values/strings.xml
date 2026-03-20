@@ -56,6 +56,10 @@
     <string name="resource_collected_resources">Collected Resources</string>
     <string name="resource_work_detail">Work Detail</string>
     <string name="resource_download_to_view">Please download to view contents</string>
+    <string name="resource_check_container_desc">Toggle resource selection</string>
+    <string name="resource_check_selected_state">Selected</string>
+    <string name="resource_check_unselected_state">Not selected</string>
+    <string name="resource_check_disabled_state">Unavailable</string>
     <string name="contents_nonexistent">Contents nonexistent</string>
     <string name="resource_photo_label">%1$s - Photo %2$d</string>
     <string name="resource_video_cover_label">%1$s - Cover</string>

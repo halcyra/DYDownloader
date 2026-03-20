@@ -9,6 +9,13 @@ import com.hhst.dydownloader.douyin.MediaType;
 import com.hhst.dydownloader.model.Platform;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
@@ -48,6 +55,20 @@ public class TikTokDownloaderTest {
         TikTokDownloader.isMixLink(
             "https://www.tiktok.com/@creator/collection/list-7345678901234567890"));
     assertFalse(TikTokDownloader.isMixLink("https://www.tiktok.com/@creator"));
+  }
+
+  @Test
+  public void isMixLink_detectsPlaylistQueryLinks() {
+    assertTrue(
+        TikTokDownloader.isMixLink(
+            "https://www.tiktok.com/@creator?playlistId=7345678901234567890"));
+  }
+
+  @Test
+  public void isMixLink_detectsLowercaseCollectionIdQueryLinks() {
+    assertTrue(
+        TikTokDownloader.isMixLink(
+            "https://www.tiktok.com/@creator?collectionid=7345678901234567890"));
   }
 
   @Test
@@ -109,6 +130,67 @@ public class TikTokDownloaderTest {
     assertEquals(1, profiles.size());
     assertEquals("7345678901234567890", profiles.get(0).awemeId());
     assertEquals("Collection title", profiles.get(0).collectionTitle());
+  }
+
+  @Test
+  public void collectMixWorksInfo_readsCollectionIdFromPlaylistIdQueryParam() throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildCollectionClientUsingPlaylistQueryParam(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectMixWorksInfo(
+            "https://www.tiktok.com/@creator?playlistId=7345678901234567890", "msToken=base");
+
+    assertEquals(1, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals("Collection title", profiles.get(0).collectionTitle());
+  }
+
+  @Test
+  public void collectMixWorksInfo_readsCollectionIdFromLowercaseCollectionidQueryParam()
+      throws Exception {
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildCollectionClientUsingLowercaseCollectionIdQueryParam(), "msToken=base");
+
+    List<AwemeProfile> profiles =
+        downloader.collectMixWorksInfo(
+            "https://www.tiktok.com/@creator?collectionid=7345678901234567890", "msToken=base");
+
+    assertEquals(1, profiles.size());
+    assertEquals("7345678901234567890", profiles.get(0).awemeId());
+    assertEquals("Collection title", profiles.get(0).collectionTitle());
+  }
+
+  @Test
+  public void concurrentCollectionAndAccountLoads_shareOneResolvedDeviceId() throws Exception {
+    AtomicInteger exploreRequests = new AtomicInteger();
+    TikTokDownloader downloader =
+        new TikTokDownloader(buildConcurrentDeviceIdClient(exploreRequests), "msToken=base");
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      Future<List<AwemeProfile>> accountFuture =
+          executor.submit(
+              awaitBarrier(
+                  barrier,
+                  () ->
+                      downloader.collectAccountWorksInfo(
+                          "https://www.tiktok.com/@creator", "msToken=base")));
+      Future<List<AwemeProfile>> mixFuture =
+          executor.submit(
+              awaitBarrier(
+                  barrier,
+                  () ->
+                      downloader.collectMixWorksInfo(
+                          "https://www.tiktok.com/@creator/collection/list-7345678901234567890",
+                          "msToken=base")));
+
+      assertEquals(1, accountFuture.get(5, TimeUnit.SECONDS).size());
+      assertEquals(1, mixFuture.get(5, TimeUnit.SECONDS).size());
+      assertEquals(1, exploreRequests.get());
+    } finally {
+      executor.shutdownNow();
+    }
   }
 
   @Test
@@ -299,6 +381,127 @@ public class TikTokDownloaderTest {
         .build();
   }
 
+  private static OkHttpClient buildCollectionClientUsingPlaylistQueryParam() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/@creator".equals(encodedPath)) {
+                return response(request, 200, "text/html", "<html>playlist query</html>");
+              }
+              if ("/api/collection/item_list/".equals(encodedPath)) {
+                assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + collectionVideoItem("7345678901234567890")
+                        + "],\"hasMore\":false,\"cursor\":\"0\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildCollectionClientUsingLowercaseCollectionIdQueryParam() {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/@creator".equals(encodedPath)) {
+                return response(request, 200, "text/html", "<html>lowercase collection id query</html>");
+              }
+              if ("/api/collection/item_list/".equals(encodedPath)) {
+                assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + collectionVideoItem("7345678901234567890")
+                        + "],\"hasMore\":false,\"cursor\":\"0\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
+  private static OkHttpClient buildConcurrentDeviceIdClient(AtomicInteger exploreRequests) {
+    return new OkHttpClient.Builder()
+        .followRedirects(true)
+        .addInterceptor(
+            chain -> {
+              Request request = chain.request();
+              String url = request.url().toString();
+              String encodedPath = request.url().encodedPath();
+              if ("/explore".equals(encodedPath)) {
+                exploreRequests.incrementAndGet();
+                try {
+                  Thread.sleep(200);
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                  throw new IOException("Interrupted while simulating device-id resolution", e);
+                }
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "{\"wid\":\"7350000000000000000\"}",
+                    "msToken=resolved-token; Path=/");
+              }
+              if ("/@creator".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "text/html",
+                    "<html>\"verified\":true,\"secUid\":\"MS4wLjABAAAA1234\"</html>");
+              }
+              if ("/api/post/item_list/".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + accountVideoItem("7345678901234567890")
+                        + "],\"hasMore\":false,\"cursor\":\"0\"}");
+              }
+              if ("/api/collection/item_list/".equals(encodedPath)) {
+                return response(
+                    request,
+                    200,
+                    "application/json",
+                    "{\"itemList\":["
+                        + collectionVideoItem("7345678901234567890")
+                        + "],\"hasMore\":false,\"cursor\":\"0\"}");
+              }
+              throw new IOException("Unexpected URL: " + url);
+            })
+        .build();
+  }
+
   private static OkHttpClient buildWorkClientUsingHtmlFallback() {
     return new OkHttpClient.Builder()
         .followRedirects(true)
@@ -362,6 +565,14 @@ public class TikTokDownloaderTest {
     return "<script>window.__UNIVERSAL_DATA_FOR_REHYDRATION__={\"itemStruct\":"
         + accountVideoItem(WORK_ITEM_ID).replace("video-" + WORK_ITEM_ID, desc)
         + "}</script>";
+  }
+
+  private static Callable<List<AwemeProfile>> awaitBarrier(
+      CyclicBarrier barrier, Callable<List<AwemeProfile>> task) {
+    return () -> {
+      barrier.await(5, TimeUnit.SECONDS);
+      return task.call();
+    };
   }
 
   private static Response response(Request request, int code, String contentType, String body) {

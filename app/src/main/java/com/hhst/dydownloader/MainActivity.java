@@ -130,6 +130,9 @@ public class MainActivity extends AppCompatActivity {
     if (fab != null) {
       fab.setImageResource(iconResId);
       fab.setOnClickListener(listener != null ? listener : v -> onDownloadClick());
+      int contentDescriptionRes =
+          iconResId == R.drawable.ic_delete ? R.string.action_delete : R.string.download;
+      fab.setContentDescription(getString(contentDescriptionRes));
     }
   }
 

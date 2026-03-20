@@ -14,23 +14,24 @@
         android:layout_height="wrap_content"
         android:padding="14dp">
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/downloadThumbnailCard"
-            android:layout_width="72dp"
-            android:layout_height="96dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="0dp"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/downloadThumbnailCard"
+                android:layout_width="72dp"
+                android:layout_height="96dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
 
-            <ImageView
-                android:id="@+id/downloadThumbnail"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="@string/app_name"
-                android:scaleType="centerCrop" />
+                <ImageView
+                    android:id="@+id/downloadThumbnail"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop" />
 
-        </com.google.android.material.card.MaterialCardView>
+            </com.google.android.material.card.MaterialCardView>
 
         <ImageView
             android:id="@+id/downloadTypeIcon"
@@ -38,7 +39,8 @@
             android:layout_height="26dp"
             android:layout_margin="6dp"
             android:background="@drawable/bg_type_icon"
-            android:contentDescription="@string/app_name"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
             android:padding="3dp"
             app:layout_constraintStart_toStartOf="@id/downloadThumbnailCard"
             app:layout_constraintTop_toTopOf="@id/downloadThumbnailCard"
@@ -46,11 +48,11 @@
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/downloadMore"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/action_more"
-            android:padding="8dp"
+            android:padding="12dp"
             android:src="@drawable/ic_more_vert"
             app:layout_constraintBottom_toBottomOf="@id/downloadStatusRow"
             app:layout_constraintEnd_toEndOf="parent"
@@ -129,15 +131,16 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/downloadRetry"
                 style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:contentDescription="@string/retry"
                 android:insetLeft="0dp"
                 android:insetTop="0dp"
                 android:insetRight="0dp"
                 android:insetBottom="0dp"
-                android:minHeight="36dp"
-                android:padding="0dp"
+                android:minHeight="48dp"
+                android:padding="8dp"
+                android:minWidth="48dp"
                 android:visibility="gone"
                 app:icon="@drawable/ic_retry"
                 app:iconGravity="textStart"

@@ -15,7 +15,8 @@
             android:id="@+id/resourceImage"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:contentDescription="@string/app_name"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
             android:scaleType="centerCrop"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintDimensionRatio="3:4"
@@ -47,7 +48,8 @@
                     android:id="@+id/resourceVideoThumbnail"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:contentDescription="@string/app_name"
+                    android:contentDescription="@null"
+                    android:importantForAccessibility="no"
                     android:scaleType="centerCrop" />
 
             </com.google.android.material.card.MaterialCardView>
@@ -87,7 +89,8 @@
             android:layout_height="28dp"
             android:layout_margin="8dp"
             android:background="@drawable/bg_type_icon"
-            android:contentDescription="@string/app_name"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
             android:padding="3dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
@@ -95,12 +98,13 @@
 
         <FrameLayout
             android:id="@+id/resourceCheckContainer"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:layout_margin="8dp"
             android:background="@drawable/bg_check_container"
             android:clickable="true"
             android:focusable="true"
+            android:contentDescription="@string/resource_check_container_desc"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
@@ -108,7 +112,8 @@
                 android:id="@+id/resourceCheckIcon"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="@string/select"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
                 android:padding="6dp"
                 android:src="@drawable/ic_check"
                 android:visibility="invisible" />

@@ -154,6 +154,42 @@ public class ResourceActionsTest {
   }
 
   @Test
+  public void resolveLocalMedia_usesItemPlatformWhenSourceKeyHasNoDatabaseId() throws Exception {
+    Path videoFile = Files.createTempFile("dy-tiktok-video", ".mp4");
+    videoFile.toFile().deleteOnExit();
+
+    ResourceEntity videoEntity =
+        entity(21L, 0L, "aweme-tiktok#video", true, videoFile.toString(), CardType.VIDEO);
+    videoEntity.platform = Platform.TIKTOK;
+
+    ResourceItem item =
+        new ResourceItem(
+            Platform.TIKTOK,
+            null,
+            0L,
+            CardType.VIDEO.getIconResId(),
+            "TikTok Video",
+            CardType.VIDEO,
+            1L,
+            0,
+            true,
+            "",
+            null,
+            "aweme-tiktok#video",
+            List.of(),
+            false,
+            "");
+
+    InMemoryResourceDao dao = new InMemoryResourceDao();
+    dao.put(videoEntity);
+
+    ResourceActions.LocalMedia media = ResourceActions.resolveLocalMedia(dao, item);
+
+    assertTrue(ResourceActions.hasCompleteLocalMedia(dao, item));
+    assertEquals(List.of(videoFile.toString()), media.references());
+  }
+
+  @Test
   public void consolidateTopLevelResources_mergesCoverAndVideoRootsIntoSingleWork() {
     ResourceEntity coverRoot = entity(1L, 0L, "aweme123#cover", false, "cover.jpg", CardType.ALBUM);
     coverRoot.text = "Work";

@@ -29,7 +29,8 @@
                 android:id="@+id/cardImage"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:contentDescription="@string/app_name"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
                 android:scaleType="centerCrop" />
 
             <ImageView
@@ -39,7 +40,8 @@
                 android:layout_gravity="top|start"
                 android:layout_margin="8dp"
                 android:background="@drawable/bg_type_icon"
-                android:contentDescription="@string/app_name"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
                 android:padding="2dp"
                 app:tint="?attr/colorOnSurface" />
 
@@ -103,12 +105,12 @@
 
                 <androidx.appcompat.widget.AppCompatImageButton
                     android:id="@+id/cardMore"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:layout_marginStart="4dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/action_more"
-                    android:padding="8dp"
+                    android:padding="12dp"
                     android:src="@drawable/ic_more_vert"
                     app:tint="?attr/colorOnSurfaceVariant" />
 

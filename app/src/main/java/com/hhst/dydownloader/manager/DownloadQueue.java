@@ -1,6 +1,8 @@
 package com.hhst.dydownloader.manager;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import com.hhst.dydownloader.db.AppDatabase;
 import com.hhst.dydownloader.db.DownloadTaskDao;
 import com.hhst.dydownloader.db.DownloadTaskEntity;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
@@ -30,12 +33,14 @@ public final class DownloadQueue {
           });
   private static final Set<DownloadTask.Status> QUEUE_STATUSES =
       EnumSet.of(DownloadTask.Status.QUEUED, DownloadTask.Status.DOWNLOADING);
+  private static volatile Executor listenerExecutor = Runnable::run;
   private static boolean initialized;
   private static DownloadTaskDao downloadTaskDao;
 
   private DownloadQueue() {}
 
   public static synchronized void init(Context context) {
+    listenerExecutor = createMainThreadExecutor();
     AppDatabase database = AppDatabase.getDatabase(context.getApplicationContext());
     downloadTaskDao = database.downloadTaskDao();
     DownloadManager.init(context);
@@ -215,7 +220,7 @@ public final class DownloadQueue {
       return;
     }
     LISTENERS.add(listener);
-    listener.onQueueChanged(getTasks());
+    dispatchQueueChanged(listener, getTasks());
   }
 
   public static synchronized void removeListener(Listener listener) {
@@ -227,9 +232,25 @@ public final class DownloadQueue {
 
   private static void notifyListeners() {
     List<DownloadTask> snapshot = copyTasks(TASKS);
-    for (Listener listener : LISTENERS) {
-      listener.onQueueChanged(snapshot);
+    List<Listener> listeners = new ArrayList<>(LISTENERS);
+    for (Listener listener : listeners) {
+      dispatchQueueChanged(listener, snapshot);
     }
+  }
+
+  private static void dispatchQueueChanged(Listener listener, List<DownloadTask> snapshot) {
+    listenerExecutor.execute(() -> listener.onQueueChanged(snapshot));
+  }
+
+  private static Executor createMainThreadExecutor() {
+    Handler mainHandler = new Handler(Looper.getMainLooper());
+    return runnable -> {
+      if (Looper.myLooper() == Looper.getMainLooper()) {
+        runnable.run();
+      } else {
+        mainHandler.post(runnable);
+      }
+    };
   }
 
   private static void restorePersistedTasks() {
