@@ -2,6 +2,7 @@ package com.hhst.dydownloader;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -26,6 +27,7 @@ import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.manager.DownloadQueue;
 import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.util.StoragePathUtils;
+import com.hhst.dydownloader.util.StorageReferenceUtils;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -48,6 +50,7 @@ public class DownloadsFragment extends Fragment
   private TextView emptyView;
   private ResourceDao resourceDao;
   private ExecutorService dbExecutor;
+  private int sizeGeneration;
 
   @Override
   public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -176,7 +179,6 @@ public class DownloadsFragment extends Fragment
                       }
                       if (id == R.id.action_delete_item) {
                         showDeleteDialog(
-                            getString(R.string.dialog_delete_single_message),
                             media.canShare(),
                             deleteLocalFiles -> deleteTaskAsync(task, deleteLocalFiles));
                         return true;
@@ -242,6 +244,56 @@ public class DownloadsFragment extends Fragment
     orderedTasks.sort(Comparator.comparingLong(DownloadTask::getCreatedAt).reversed());
     if (adapter != null) adapter.submitList(orderedTasks);
     if (emptyView != null) emptyView.setVisibility(tasks.isEmpty() ? View.VISIBLE : View.GONE);
+    refreshOccupiedSizes(orderedTasks);
+  }
+
+  private void refreshOccupiedSizes(List<DownloadTask> tasks) {
+    ExecutorService exec = dbExecutor;
+    ResourceDao dao = resourceDao;
+    Context fragmentContext = getContext();
+    if (exec == null
+        || dao == null
+        || fragmentContext == null
+        || tasks == null
+        || tasks.isEmpty()) {
+      return;
+    }
+    final int generation = ++sizeGeneration;
+    final Context appContext = fragmentContext.getApplicationContext();
+    exec.execute(
+        () ->
+            {
+              List<DownloadTask> snapshot = new ArrayList<>(tasks.size());
+              for (DownloadTask task : tasks) {
+                DownloadTask copy = task.copy();
+                copy.setOccupiedBytes(resolveOccupiedBytes(appContext, dao, copy));
+                snapshot.add(copy);
+              }
+              mainHandler.post(
+                  () -> {
+                    if (destroyed.get() || generation != sizeGeneration || !isAdded()) {
+                      return;
+                    }
+                    if (adapter != null) {
+                      adapter.submitList(snapshot);
+                    }
+                  });
+            });
+  }
+
+  private long resolveOccupiedBytes(Context context, ResourceDao dao, DownloadTask task) {
+    if (task == null || task.getStatus() != DownloadTask.Status.COMPLETED) {
+      return -1L;
+    }
+    ResourceActions.LocalMedia media = ResourceActions.resolveLocalMedia(dao, task);
+    long total = 0L;
+    for (String reference : media.references()) {
+      long size = StorageReferenceUtils.sizeOfReference(context, reference);
+      if (size > 0) {
+        total += size;
+      }
+    }
+    return total > 0 ? total : -1L;
   }
 
   private void openResource(DownloadTask task) {
@@ -304,19 +356,22 @@ public class DownloadsFragment extends Fragment
         });
   }
 
-  private void showDeleteDialog(
-      CharSequence message, boolean showDeleteLocalFiles, Consumer<Boolean> onConfirm) {
+  private void showDeleteDialog(boolean showDeleteLocalFiles, Consumer<Boolean> onConfirm) {
     View dialogView =
         LayoutInflater.from(requireContext()).inflate(R.layout.dialog_delete_confirmation, null);
     TextView messageView = dialogView.findViewById(R.id.deleteDialogMessage);
     MaterialCheckBox deleteLocalFilesCheck = dialogView.findViewById(R.id.deleteLocalFilesCheck);
-    messageView.setText(message);
+    messageView.setVisibility(View.GONE);
     deleteLocalFilesCheck.setVisibility(showDeleteLocalFiles ? View.VISIBLE : View.GONE);
     deleteLocalFilesCheck.setChecked(false);
 
-    new MaterialAlertDialogBuilder(requireContext())
-        .setTitle(R.string.action_delete)
-        .setView(dialogView)
+    MaterialAlertDialogBuilder builder =
+        new MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.dialog_delete_single_message);
+    if (showDeleteLocalFiles) {
+      builder.setView(dialogView);
+    }
+    builder
         .setPositiveButton(
             R.string.action_delete,
             (dialog, which) -> onConfirm.accept(deleteLocalFilesCheck.isChecked()))

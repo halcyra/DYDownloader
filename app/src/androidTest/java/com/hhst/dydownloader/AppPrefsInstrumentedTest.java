@@ -1,25 +1,18 @@
 package com.hhst.dydownloader;
 
-import android.content.Context;
-
-import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.platform.app.InstrumentationRegistry;
-
-import org.junit.After;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/**
- * Instrumented test, which will execute on an Android device.
- *
- * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
- */
+import android.content.Context;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import org.junit.After;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 @RunWith(AndroidJUnit4.class)
-public class ExampleInstrumentedTest {
+public class AppPrefsInstrumentedTest {
   private final Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
   @After
@@ -33,7 +26,7 @@ public class ExampleInstrumentedTest {
   }
 
   @Test
-  public void appPrefs_cookieConfiguredFlagTracksStoredCookie() {
+  public void cookieConfiguredFlag_tracksStoredCookie() {
     AppPrefs.setCookie(appContext, "msToken=abc123; UIFID=uifid123");
     assertTrue(AppPrefs.hasConfiguredCookie(appContext));
     assertFalse(AppPrefs.getCookie(appContext).isBlank());

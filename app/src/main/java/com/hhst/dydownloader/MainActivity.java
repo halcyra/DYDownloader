@@ -13,6 +13,7 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -20,6 +21,7 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.hhst.dydownloader.manager.DownloadQueue;
@@ -37,6 +39,8 @@ public class MainActivity extends AppCompatActivity {
   private Runnable hideClipboardPromptRunnable;
   private Runnable clearExitPendingRunnable;
   private long lastBackPressedAt;
+  private int systemBarTopInset;
+  private boolean cookieSetupPromptShowing;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -58,21 +62,11 @@ public class MainActivity extends AppCompatActivity {
     findViewById(R.id.downloadButton).setOnClickListener(v -> onDownloadClick());
     clipboardPrompt = findViewById(R.id.clipboardPrompt);
     topPromptAnchor = findViewById(R.id.topPromptAnchor);
+    findViewById(R.id.clipboardPromptDismiss).setOnClickListener(v -> hideClipboardPrompt());
     findViewById(R.id.clipboardPromptLoad)
         .setOnClickListener(
             v -> {
-              ClipboardManager clipboard =
-                  (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-              if (clipboard == null || !clipboard.hasPrimaryClip()) {
-                hideClipboardPrompt();
-                return;
-              }
-              CharSequence clipText = clipboard.getPrimaryClip().getItemAt(0).coerceToText(this);
-              if (clipText == null) {
-                hideClipboardPrompt();
-                return;
-              }
-              String text = clipText.toString().trim();
+              String text = getClipboardText();
               if (!looksLikeSupportedLink(text)) {
                 hideClipboardPrompt();
                 return;
@@ -96,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
             if (bottomNavigation.getSelectedItemId() != selectedTabId) {
               bottomNavigation.setSelectedItemId(selectedTabId);
             }
+            updateClipboardPromptAnchor();
           }
         });
 
@@ -112,15 +107,14 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.main),
         (v, insets) -> {
           var systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-          v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
-          if (topPromptAnchor != null) {
-            ViewGroup.LayoutParams anchorLayout = topPromptAnchor.getLayoutParams();
-            int promptOffset = systemBars.top + resolveToolbarOffset() + dpToPx(16);
-            if (anchorLayout.height != promptOffset) {
-              anchorLayout.height = promptOffset;
-              topPromptAnchor.setLayoutParams(anchorLayout);
-            }
-          }
+          systemBarTopInset = systemBars.top;
+          v.setPadding(systemBars.left, 0, systemBars.right, 0);
+          bottomNavigation.setPadding(
+              bottomNavigation.getPaddingLeft(),
+              bottomNavigation.getPaddingTop(),
+              bottomNavigation.getPaddingRight(),
+              Math.min(systemBars.bottom, dpToPx(16)));
+          updateClipboardPromptAnchor();
           return insets;
         });
   }
@@ -156,9 +150,41 @@ public class MainActivity extends AppCompatActivity {
   @Override
   protected void onResume() {
     super.onResume();
+    if (maybeShowCookieSetupPrompt()) {
+      return;
+    }
     if (((DYDownloaderApp) getApplication()).consumeClipboardCheckPending()) {
       findViewById(R.id.main).postDelayed(this::maybeShowClipboardLoadPrompt, 250);
     }
+  }
+
+  private boolean maybeShowCookieSetupPrompt() {
+    if (cookieSetupPromptShowing || !AppPrefs.shouldShowCookieSetupPrompt(this)) {
+      return false;
+    }
+    cookieSetupPromptShowing = true;
+    findViewById(R.id.main)
+        .post(
+            () -> {
+              if (isFinishing() || isDestroyed()) {
+                cookieSetupPromptShowing = false;
+                return;
+              }
+              new MaterialAlertDialogBuilder(this)
+                  .setMessage(R.string.cookie_setup_prompt_message)
+                  .setPositiveButton(
+                      R.string.cookie_setup_prompt_positive,
+                      (dialog, which) -> {
+                        AppPrefs.dismissCookieSetupPrompt(this);
+                        startActivity(new Intent(this, CookiesActivity.class));
+                      })
+                  .setNegativeButton(
+                      R.string.cookie_setup_prompt_negative,
+                      (dialog, which) -> AppPrefs.dismissCookieSetupPrompt(this))
+                  .setOnDismissListener(dialog -> cookieSetupPromptShowing = false)
+                  .show();
+            });
+    return true;
   }
 
   private void onDownloadClick() {
@@ -178,12 +204,9 @@ public class MainActivity extends AppCompatActivity {
     view.findViewById(R.id.btnPaste)
         .setOnClickListener(
             v -> {
-              var clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-              if (clipboard != null && clipboard.hasPrimaryClip()) {
-                var text = clipboard.getPrimaryClip().getItemAt(0).getText();
-                if (text != null) {
-                  urlInput.setText(text);
-                }
+              String text = getClipboardText();
+              if (text != null) {
+                urlInput.setText(text);
               }
             });
 
@@ -206,26 +229,15 @@ public class MainActivity extends AppCompatActivity {
   }
 
   private void maybeShowClipboardLoadPrompt() {
-    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-    if (clipboard == null || !clipboard.hasPrimaryClip()) {
-      return;
-    }
-    CharSequence clipText = clipboard.getPrimaryClip().getItemAt(0).coerceToText(this);
-    if (clipText == null) {
-      return;
-    }
-    String text = clipText.toString().trim();
-    if (text.isEmpty()) {
-      return;
-    }
-    if (!looksLikeSupportedLink(text)) {
+    String text = getClipboardText();
+    if (text == null || !looksLikeSupportedLink(text)) {
       return;
     }
     showClipboardPrompt();
   }
 
   private boolean looksLikeSupportedLink(String text) {
-    return ShareLinkResolver.containsSupportedLink(text);
+    return text != null && !text.isBlank() && ShareLinkResolver.containsSupportedLink(text);
   }
 
   private void openResourceFromShareText(String text) {
@@ -255,6 +267,7 @@ public class MainActivity extends AppCompatActivity {
     if (clipboardPrompt == null) {
       return;
     }
+    updateClipboardPromptAnchor();
     clipboardPrompt.setVisibility(View.VISIBLE);
     clipboardPrompt.bringToFront();
     if (hideClipboardPromptRunnable != null) {
@@ -272,6 +285,33 @@ public class MainActivity extends AppCompatActivity {
     if (clipboardPrompt != null) {
       clipboardPrompt.setVisibility(View.GONE);
     }
+  }
+
+  private void updateClipboardPromptAnchor() {
+    if (topPromptAnchor == null) {
+      return;
+    }
+    ViewGroup.LayoutParams anchorLayout = topPromptAnchor.getLayoutParams();
+    int toolbarOffset = selectedTabId == R.id.nav_home ? resolveToolbarOffset() : 0;
+    int promptOffset = systemBarTopInset + toolbarOffset;
+    if (anchorLayout.height != promptOffset) {
+      anchorLayout.height = promptOffset;
+      topPromptAnchor.setLayoutParams(anchorLayout);
+    }
+  }
+
+  @Nullable
+  private String getClipboardText() {
+    ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+    if (clipboard == null || !clipboard.hasPrimaryClip()) {
+      return null;
+    }
+    CharSequence clipText = clipboard.getPrimaryClip().getItemAt(0).coerceToText(this);
+    if (clipText == null) {
+      return null;
+    }
+    String text = clipText.toString().trim();
+    return text.isEmpty() ? null : text;
   }
 
   private void scheduleExitConfirmReset() {

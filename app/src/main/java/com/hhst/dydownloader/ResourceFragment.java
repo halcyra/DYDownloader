@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.hhst.dydownloader.adapter.ResourceAdapter;
 import com.hhst.dydownloader.db.AppDatabase;
 import com.hhst.dydownloader.db.ResourceDao;
@@ -32,6 +33,7 @@ import com.hhst.dydownloader.share.ShareLinkResolver.LinkKind;
 import com.hhst.dydownloader.tiktok.TikTokDownloader;
 import com.hhst.dydownloader.util.MediaSourceUtils;
 import com.hhst.dydownloader.util.StorageReferenceUtils;
+import com.hhst.dydownloader.util.StoragePathUtils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,6 +58,7 @@ public class ResourceFragment extends Fragment
   private static final String STATE_SHARE_LINK = "state_share_link";
   private static final String STATE_RESOURCE_ID = "state_resource_id";
   private static final String STATE_RESOURCE_SNAPSHOT = "state_resource_snapshot";
+  private static final String STATE_MEDIA_FILTER = "state_media_filter";
   private static final String ARG_SCREEN_KEY = "screen_key";
   private static final String ARG_RESOURCE_ID = "resource_id";
   private static final String ARG_RESOURCE_SNAPSHOT = "resource_snapshot";
@@ -66,11 +69,13 @@ public class ResourceFragment extends Fragment
   private final Set<String> completedQueueKeys = new HashSet<>();
   private final Set<String> downloadedKeys = new HashSet<>();
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
+  private final List<ResourceItem> allResourceList = new ArrayList<>();
   private List<ResourceItem> resourceList = new ArrayList<>();
   private String title, referrer = ResourceActivity.REFERRER_RESOURCE;
   private String screenKey;
   private String snapshotToken;
   private ResourceAdapter adapter;
+  private MaterialButtonToggleGroup filterGroup;
   private View actionBar, btnToggleSelectAll, btnDownload, loadingProgress;
   private String shareLink;
   private long resourceId = -1L;
@@ -80,6 +85,7 @@ public class ResourceFragment extends Fragment
   private int mediaStateGeneration = 0;
   private ExecutorService dbExecutor;
   private ResourceDao resourceDao;
+  private MediaFilter mediaFilter = MediaFilter.ALL;
 
   public static ResourceFragment newInstance(String title, String referrer, Long resourceId) {
     return newInstance(title, referrer, resourceId, null);
@@ -124,6 +130,7 @@ public class ResourceFragment extends Fragment
       shareLink = savedInstanceState.getString(STATE_SHARE_LINK);
       resourceId = savedInstanceState.getLong(STATE_RESOURCE_ID, -1L);
       snapshotToken = savedInstanceState.getString(STATE_RESOURCE_SNAPSHOT);
+      mediaFilter = MediaFilter.fromName(savedInstanceState.getString(STATE_MEDIA_FILTER));
       resourceList =
           restoreResourceList(screenKey, snapshotToken);
     } else if (getArguments() != null) {
@@ -140,6 +147,8 @@ public class ResourceFragment extends Fragment
     if (resourceList == null) {
       resourceList = new ArrayList<>();
     }
+    allResourceList.clear();
+    allResourceList.addAll(resourceList);
     if (shouldPersistResourceSnapshot()) {
       persistResourceSnapshot();
     }
@@ -168,6 +177,7 @@ public class ResourceFragment extends Fragment
     outState.putString(STATE_REFERRER, referrer);
     outState.putString(STATE_SHARE_LINK, shareLink);
     outState.putLong(STATE_RESOURCE_ID, resourceId);
+    outState.putString(STATE_MEDIA_FILTER, mediaFilter.name());
     String persistedSnapshotToken = persistResourceSnapshot();
     if (!persistedSnapshotToken.isBlank()) {
       outState.putString(STATE_RESOURCE_SNAPSHOT, persistedSnapshotToken);
@@ -237,12 +247,29 @@ public class ResourceFragment extends Fragment
     recyclerView.setAdapter(adapter);
 
     actionBar = view.findViewById(R.id.resourceActionBar);
+    filterGroup = view.findViewById(R.id.resourceFilterGroup);
     btnToggleSelectAll = view.findViewById(R.id.btnToggleSelectAll);
     btnDownload = view.findViewById(R.id.btnDownload);
     loadingProgress = view.findViewById(R.id.loadingProgress);
 
+    if (filterGroup != null) {
+      filterGroup.addOnButtonCheckedListener(
+          (group, checkedId, isChecked) -> {
+            if (!isChecked) {
+              return;
+            }
+            MediaFilter nextFilter = MediaFilter.fromButtonId(checkedId);
+            if (nextFilter != mediaFilter) {
+              mediaFilter = nextFilter;
+              applyResourceFilter();
+            }
+          });
+    }
+
     btnToggleSelectAll.setOnClickListener(v -> toggleSelectAll());
     btnDownload.setOnClickListener(v -> downloadSelection());
+    syncFilterButtons();
+    applyResourceFilter();
     refreshQueueState(true);
 
     if (shareLink != null && resourceList.isEmpty()) {
@@ -472,12 +499,12 @@ public class ResourceFragment extends Fragment
           }
           inFlightLoad = null;
           loadingProgress.setVisibility(View.GONE);
-          resourceList.clear();
-          resourceList.addAll(items);
           title = finalTitle;
 
           selectedKeys.clear();
-          screenKey = ResourceScreenStore.replace(screenKey, resourceList);
+          allResourceList.clear();
+          allResourceList.addAll(items);
+          screenKey = ResourceScreenStore.replace(screenKey, allResourceList);
 
           Bundle args = getArguments();
           if (args != null) {
@@ -488,11 +515,7 @@ public class ResourceFragment extends Fragment
           if (getActivity() instanceof ResourceActivity) {
             ((ResourceActivity) getActivity()).setResourceTitle(title);
           }
-          if (adapter != null) {
-            adapter.submitList(resourceList);
-          }
-          refreshDownloadedKeysAsync();
-          updateActionButtons();
+          applyResourceFilter();
         });
   }
 
@@ -510,15 +533,10 @@ public class ResourceFragment extends Fragment
         return collectionTitle;
       }
     }
-    String commonNickname = ResourceScreenSupport.resolveAccountTitle(allProfiles, "");
+    String commonNickname = resolveAccountTitle(allProfiles, "");
     return commonNickname.isBlank()
         ? getString(R.string.resource_collected_resources)
         : commonNickname;
-  }
-
-  private String resolveDownloadGroupDir(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    return ResourceScreenSupport.resolveDownloadGroupDir(
-        resolveShareLinkKind(), allProfiles, fallbackTitle);
   }
 
   private LinkKind resolveShareLinkKind() {
@@ -530,11 +548,103 @@ public class ResourceFragment extends Fragment
   }
 
   private String resolveCollectionTitle(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    return ResourceScreenSupport.resolveCollectionTitle(allProfiles, fallbackTitle);
+    if (allProfiles != null) {
+      for (AwemeProfile profile : allProfiles) {
+        if (profile != null
+            && profile.collectionTitle() != null
+            && !profile.collectionTitle().isBlank()) {
+          return profile.collectionTitle().trim();
+        }
+      }
+    }
+    return fallbackTitle == null ? "" : fallbackTitle.trim();
+  }
+
+  private String resolveDownloadGroupDir(List<AwemeProfile> allProfiles, String fallbackTitle) {
+    return switch (resolveShareLinkKind()) {
+      case MIX -> StoragePathUtils.joinSegments(resolveCollectionTitle(allProfiles, fallbackTitle));
+      case ACCOUNT ->
+          StoragePathUtils.joinSegments(resolveAccountTitle(allProfiles, fallbackTitle));
+      case WORK, UNKNOWN ->
+          StoragePathUtils.joinSegments(resolveWorkStorageTitle(allProfiles, fallbackTitle));
+    };
   }
 
   private String resolveAccountTitle(List<AwemeProfile> allProfiles, String fallbackTitle) {
-    return ResourceScreenSupport.resolveAccountTitle(allProfiles, fallbackTitle);
+    String commonNickname = resolveCommonAuthorNickname(allProfiles);
+    if (!commonNickname.isBlank()) {
+      return commonNickname;
+    }
+    return fallbackTitle == null ? "" : fallbackTitle.trim();
+  }
+
+  private String resolveCommonAuthorNickname(List<AwemeProfile> allProfiles) {
+    if (allProfiles == null || allProfiles.isEmpty()) {
+      return "";
+    }
+    String commonNickname = allProfiles.get(0).authorNickname();
+    if (commonNickname == null || commonNickname.isBlank()) {
+      return "";
+    }
+    for (AwemeProfile profile : allProfiles) {
+      if (profile == null || !java.util.Objects.equals(profile.authorNickname(), commonNickname)) {
+        return "";
+      }
+    }
+    return commonNickname.trim();
+  }
+
+  private String resolveWorkStorageTitle(List<AwemeProfile> allProfiles, String fallbackTitle) {
+    if (allProfiles != null && allProfiles.size() == 1) {
+      AwemeProfile profile = allProfiles.get(0);
+      if (profile != null) {
+        String desc = profile.desc();
+        if (desc != null && !desc.isBlank()) {
+          return desc.trim();
+        }
+        String awemeId = profile.awemeId();
+        if (awemeId != null && !awemeId.isBlank()) {
+          return awemeId.trim();
+        }
+      }
+    }
+    return fallbackTitle == null ? "" : fallbackTitle.trim();
+  }
+
+  private void applyResourceFilter() {
+    resourceList.clear();
+    for (ResourceItem item : allResourceList) {
+      if (matchesCurrentFilter(item)) {
+        resourceList.add(item);
+      }
+    }
+    if (adapter != null) {
+      adapter.submitList(resourceList);
+      adapter.refreshSelectionState();
+    }
+    refreshDownloadedKeysAsync();
+    updateActionButtons();
+    syncFilterButtons();
+  }
+
+  private boolean matchesCurrentFilter(ResourceItem item) {
+    if (mediaFilter == MediaFilter.ALL) {
+      return true;
+    }
+    if (item == null) {
+      return false;
+    }
+    return mediaFilter == MediaFilter.IMAGES ? item.imagePost() : !item.imagePost();
+  }
+
+  private void syncFilterButtons() {
+    if (filterGroup == null) {
+      return;
+    }
+    int targetButtonId = mediaFilter.buttonId;
+    if (filterGroup.getCheckedButtonId() != targetButtonId) {
+      filterGroup.check(targetButtonId);
+    }
   }
 
   private void showLoadFailed(int generation, String message) {
@@ -602,18 +712,14 @@ public class ResourceFragment extends Fragment
                     return;
                   }
                   loadingProgress.setVisibility(View.GONE);
-                  resourceList.clear();
-                  resourceList.addAll(finalItems);
-                  screenKey = ResourceScreenStore.replace(screenKey, resourceList);
+                  allResourceList.clear();
+                  allResourceList.addAll(finalItems);
+                  screenKey = ResourceScreenStore.replace(screenKey, allResourceList);
                   Bundle args = getArguments();
                   if (args != null) {
                     args.putString(ARG_SCREEN_KEY, screenKey);
                   }
-                  if (adapter != null) {
-                    adapter.submitList(resourceList);
-                  }
-                  refreshDownloadedKeysAsync();
-                  updateActionButtons();
+                  applyResourceFilter();
                 });
           } catch (Exception e) {
             Log.e(TAG, "Failed loading from database", e);
@@ -1083,7 +1189,7 @@ public class ResourceFragment extends Fragment
   }
 
   private boolean shouldPersistResourceSnapshot() {
-    return ResourceScreenSupport.shouldPersistSnapshot(resourceId, resourceList);
+    return resourceId <= 0 && resourceList != null && !resourceList.isEmpty();
   }
 
   private String persistResourceSnapshot() {
@@ -1244,6 +1350,38 @@ public class ResourceFragment extends Fragment
       case ALBUM -> 2;
       case COLLECTION -> 3;
     };
+  }
+
+  private enum MediaFilter {
+    ALL(R.id.resourceFilterAll),
+    IMAGES(R.id.resourceFilterImages),
+    VIDEOS(R.id.resourceFilterVideos);
+
+    private final int buttonId;
+
+    MediaFilter(int buttonId) {
+      this.buttonId = buttonId;
+    }
+
+    static MediaFilter fromButtonId(int buttonId) {
+      for (MediaFilter filter : values()) {
+        if (filter.buttonId == buttonId) {
+          return filter;
+        }
+      }
+      return ALL;
+    }
+
+    static MediaFilter fromName(String name) {
+      if (name == null || name.isBlank()) {
+        return ALL;
+      }
+      try {
+        return MediaFilter.valueOf(name);
+      } catch (IllegalArgumentException ignored) {
+        return ALL;
+      }
+    }
   }
 
   @FunctionalInterface

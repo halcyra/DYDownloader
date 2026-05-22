@@ -28,4 +28,17 @@ public class SourceKeyUtilsTest {
     assertTrue(SourceKeyUtils.hasImageLeafMarker("aweme123#live:1"));
     assertFalse(SourceKeyUtils.hasImageLeafMarker("aweme123#cover"));
   }
+
+  @Test
+  public void baseOf_extractsBaseFromChildKey() {
+    assertEquals("7363189720901351234", SourceKeyUtils.baseOf("7363189720901351234#photo:2"));
+  }
+
+  @Test
+  public void isSameResource_treatsChildAsSameResource() {
+    assertTrue(
+        SourceKeyUtils.isSameResource(
+            "7363189720901351234", "7363189720901351234#video"));
+    assertFalse(SourceKeyUtils.isSameResource("a#photo:1", "b#photo:1"));
+  }
 }

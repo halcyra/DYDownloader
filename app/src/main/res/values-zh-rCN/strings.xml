@@ -18,8 +18,6 @@
     <string name="download_status_failed_short">失败</string>
     <string name="download_error_label">错误：</string>
     <string name="download_error_summary">错误：%1$s</string>
-    <string name="download_save_path_label">保存到：</string>
-    <string name="download_save_path">保存到：%1$s</string>
     <string name="download_path_copied">路径已复制到剪贴板</string>
     <string name="download_error_unknown">未知错误</string>
     <string name="hint_enter_url">输入分享链接或文本</string>
@@ -53,6 +51,9 @@
     <string name="home_selected_count">已选中：%1$d</string>
     <string name="resource_load_failed">加载失败：%1$s</string>
     <string name="resource_no_works_found">未找到作品或当前链接类型不受支持</string>
+    <string name="resource_filter_all">全部</string>
+    <string name="resource_filter_images">图片</string>
+    <string name="resource_filter_videos">视频</string>
     <string name="resource_collected_resources">已收集资源</string>
     <string name="resource_work_detail">作品详情</string>
     <string name="resource_download_to_view">请先下载后再查看内容</string>
@@ -62,7 +63,6 @@
     <string name="download_child_photo">图片 %1$02d</string>
     <string name="download_child_cover">封面</string>
     <string name="download_child_video">视频</string>
-    <string name="language_default">English</string>
     <string name="cache_size_initial">0 MB</string>
     <string name="cache_size_bytes">%1$d B</string>
     <string name="cache_size_kb">%1$.2f KB</string>
@@ -87,6 +87,14 @@
     <string name="settings_status_set">已设置</string>
     <string name="settings_status_request_only">已设置（未登录）</string>
     <string name="settings_status_unset">未设置</string>
+    <string name="cookie_setup_prompt_message">需要登录设置Cookies: 设置-&gt;Cookies</string>
+    <string name="cookie_setup_prompt_positive">立即设置</string>
+    <string name="cookie_setup_prompt_negative">不再提醒</string>
+    <string name="clipboard_prompt_dismiss">关闭</string>
+    <string name="resource_check_container_desc">切换资源选择</string>
+    <string name="resource_check_selected_state">已选中</string>
+    <string name="resource_check_unselected_state">未选中</string>
+    <string name="resource_check_disabled_state">不可用</string>
     <string name="generic_media_name">媒体</string>
     <string name="generic_work_title">作品</string>
 

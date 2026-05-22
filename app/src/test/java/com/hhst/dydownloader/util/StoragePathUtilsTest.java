@@ -36,4 +36,9 @@ public class StoragePathUtilsTest {
 
     assertEquals("Download/DYDownloader/Creator Name/Work Title", displayPath);
   }
+
+  @Test
+  public void buildPublicDownloadDisplayPath_usesUnifiedRootForBlankRelativeDirectory() {
+    assertEquals("Download/DYDownloader", StoragePathUtils.buildPublicDownloadDisplayPath(""));
+  }
 }

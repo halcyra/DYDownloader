@@ -22,6 +22,8 @@ public final class AppPrefs {
   public static final String KEY_LANGUAGE = "language";
   public static final String KEY_HOME_SORT = "home_sort";
   public static final String KEY_HOME_FILTER = "home_filter";
+  private static final String KEY_COOKIE_SETUP_PROMPT_DISMISSED =
+      "cookie_setup_prompt_dismissed";
   private static final String TAG = "AppPrefs";
   private static final String KEY_COOKIE_ENCRYPTED = "cookie_encrypted";
   private static final String KEY_TIKTOK_COOKIE = "cookie_tiktok";
@@ -121,6 +123,16 @@ public final class AppPrefs {
     return hasAuthenticatedCookieValue(platform, getCookie(context, platform));
   }
 
+  public static boolean shouldShowCookieSetupPrompt(Context context) {
+    return !prefs(context).getBoolean(KEY_COOKIE_SETUP_PROMPT_DISMISSED, false)
+        && !hasConfiguredCookie(context, Platform.DOUYIN)
+        && !hasConfiguredCookie(context, Platform.TIKTOK);
+  }
+
+  public static void dismissCookieSetupPrompt(Context context) {
+    prefs(context).edit().putBoolean(KEY_COOKIE_SETUP_PROMPT_DISMISSED, true).apply();
+  }
+
   public static boolean isConfiguredCookieValue(String cookie) {
     return isConfiguredCookieValue(Platform.DOUYIN, cookie);
   }
@@ -148,20 +160,14 @@ public final class AppPrefs {
   }
 
   public static String getLanguageTag(Context context) {
-    String raw = prefs(context).getString(KEY_LANGUAGE, "en");
-    if (raw.isBlank()) {
-      return "en";
-    }
-    return switch (raw) {
-      case "English" -> "en";
-      case "中文", "简体中文" -> "zh-CN";
-      case "繁體中文" -> "zh-TW";
-      default -> raw;
-    };
+    return AppLocaleManager.normalizeLanguageTag(prefs(context).getString(KEY_LANGUAGE, "en"));
   }
 
   public static void setLanguageTag(Context context, String languageTag) {
-    prefs(context).edit().putString(KEY_LANGUAGE, languageTag).apply();
+    prefs(context)
+        .edit()
+        .putString(KEY_LANGUAGE, AppLocaleManager.normalizeLanguageTag(languageTag))
+        .apply();
   }
 
   public static int getHomeSort(Context context) {

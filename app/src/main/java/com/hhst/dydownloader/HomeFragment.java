@@ -149,7 +149,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
           @Override
           public void handleOnBackPressed() {
             if (searchMode) {
-              exitSearchMode(false);
+              exitSearchMode();
               return;
             }
             if (adapter != null && adapter.isSelectionMode()) {
@@ -259,7 +259,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
       searchCloseButton.setOnClickListener(
           v -> {
             if (getCurrentSearchQuery().isEmpty()) {
-              exitSearchMode(false);
+              exitSearchMode();
               return;
             }
             if (searchInput != null) {
@@ -273,7 +273,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
     if (searchMode) {
       enterSearchMode();
     } else {
-      exitSearchMode(false);
+      exitSearchMode();
     }
   }
 
@@ -310,27 +310,15 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
     }
   }
 
-  private void exitSearchMode(boolean clearText) {
+  private void exitSearchMode() {
     searchMode = false;
-    if (clearText) {
-      searchText = "";
-      if (searchInput != null) {
-        searchInput.setText("");
-      }
-    }
-    if (shouldRefreshDisplayAfterExit(clearText)) {
-      updateDisplayList();
-    }
+    updateDisplayList();
     clearSearchInputFocus();
     toolbar.setVisibility(View.VISIBLE);
     androidx.core.view.ViewCompat.requestApplyInsets(toolbar);
     if (searchContainer != null) {
       searchContainer.setVisibility(View.GONE);
     }
-  }
-
-  boolean shouldRefreshDisplayAfterExit(boolean clearText) {
-    return true;
   }
 
   @Override
@@ -522,7 +510,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   @Override
   public void onCardClick(ResourceItem item, int position) {
     if (searchMode) {
-      exitSearchMode(false);
+      exitSearchMode();
     }
     if (item.id() == null || item.id() <= 0) {
       Toast.makeText(getContext(), R.string.contents_nonexistent, Toast.LENGTH_SHORT).show();
@@ -614,8 +602,8 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
                       }
                       if (id == R.id.action_delete_item) {
                         showDeleteDialog(
-                            R.string.action_delete,
-                            getString(R.string.dialog_delete_single_message),
+                            R.string.dialog_delete_single_message,
+                            null,
                             media.canShare(),
                             deleteLocalFiles ->
                                 deleteItemsAsync(List.of(item), deleteLocalFiles, false));
@@ -637,13 +625,21 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
         LayoutInflater.from(requireContext()).inflate(R.layout.dialog_delete_confirmation, null);
     TextView messageView = dialogView.findViewById(R.id.deleteDialogMessage);
     MaterialCheckBox deleteLocalFilesCheck = dialogView.findViewById(R.id.deleteLocalFilesCheck);
-    messageView.setText(message);
+    if (message == null || message.length() == 0) {
+      messageView.setVisibility(View.GONE);
+    } else {
+      messageView.setText(message);
+      messageView.setVisibility(View.VISIBLE);
+    }
     deleteLocalFilesCheck.setVisibility(showDeleteLocalFiles ? View.VISIBLE : View.GONE);
     deleteLocalFilesCheck.setChecked(false);
 
-    new MaterialAlertDialogBuilder(requireContext())
-        .setTitle(titleResId)
-        .setView(dialogView)
+    MaterialAlertDialogBuilder builder =
+        new MaterialAlertDialogBuilder(requireContext()).setTitle(titleResId);
+    if ((message != null && message.length() > 0) || showDeleteLocalFiles) {
+      builder.setView(dialogView);
+    }
+    builder
         .setPositiveButton(
             R.string.action_delete,
             (dialog, which) -> onConfirm.accept(deleteLocalFilesCheck.isChecked()))

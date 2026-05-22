@@ -314,12 +314,13 @@ public class DownloadManager {
   }
 
   private String resolveDownloadRelativeDir(ResourceItem item) {
-    if (item != null && item.storageDir() != null && !item.storageDir().isBlank()) {
-      return item.storageDir();
+    if (item == null) {
+      return "";
     }
-    String fallbackTitle =
-        item != null ? item.text() : context.getString(R.string.generic_work_title);
-    return StoragePathUtils.joinSegments(fallbackTitle);
+    if (item.storageDir() != null && !item.storageDir().isBlank()) {
+      return item.storageDir().trim();
+    }
+    return StoragePathUtils.joinSegments(item.text());
   }
 
   private void saveWorkToHome(

@@ -18,14 +18,27 @@ public final class AppLocaleManager {
 
   public static void setLocale(Context context, String languageTag) {
     AppPrefs.setLanguageTag(context, languageTag);
-    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(languageTag));
+    AppCompatDelegate.setApplicationLocales(
+        LocaleListCompat.forLanguageTags(AppPrefs.getLanguageTag(context)));
   }
 
-  public static String getLanguageLabel(Context context, String languageTag) {
+  public static String getLanguageLabel(String languageTag) {
+    return switch (normalizeLanguageTag(languageTag)) {
+      case TAG_ZH_CN -> "简体中文";
+      case TAG_ZH_TW -> "繁體中文";
+      default -> "English";
+    };
+  }
+
+  public static String normalizeLanguageTag(String languageTag) {
+    if (languageTag == null || languageTag.isBlank()) {
+      return TAG_EN;
+    }
     return switch (languageTag) {
-      case TAG_ZH_CN -> context.getString(R.string.language_option_zh_cn);
-      case TAG_ZH_TW -> context.getString(R.string.language_option_zh_tw);
-      default -> context.getString(R.string.language_option_en);
+      case "English", TAG_EN -> TAG_EN;
+      case "中文", "简体中文", "簡體中文", TAG_ZH_CN -> TAG_ZH_CN;
+      case "繁體中文", "繁体中文", TAG_ZH_TW -> TAG_ZH_TW;
+      default -> TAG_EN;
     };
   }
 }

@@ -71,6 +71,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
     }
     holder.title.setText(item.text());
     bindSavePathRow(holder, task, item, context);
+    bindSizeRow(holder, task, context);
     holder.typeIcon.setImageResource(item.type().getIconResId());
     holder.moreButton.setOnClickListener(
         v -> {
@@ -144,7 +145,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       Context context) {
     bindPathContent(
         holder,
-        context.getString(R.string.download_save_path_label),
+        "",
         resolveDisplayPath(item),
         holder.defaultLabelTextColor,
         holder.defaultPathTextColor,
@@ -183,6 +184,18 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
     holder.path.setOnLongClickListener(null);
   }
 
+  private void bindSizeRow(
+      @NonNull DownloadViewHolder holder, @NonNull DownloadTask task, Context context) {
+    long occupiedBytes = task.getOccupiedBytes();
+    if (task.getStatus() != DownloadTask.Status.COMPLETED || occupiedBytes <= 0) {
+      holder.size.setVisibility(View.GONE);
+      holder.size.setText(null);
+      return;
+    }
+    holder.size.setText(formatBytes(context, occupiedBytes));
+    holder.size.setVisibility(View.VISIBLE);
+  }
+
   private void bindPathContent(
       @NonNull DownloadViewHolder holder,
       @NonNull String label,
@@ -191,6 +204,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       int valueColor,
       @NonNull TextUtils.TruncateAt ellipsize) {
     holder.pathLabel.setText(label);
+    holder.pathLabel.setVisibility(label.isEmpty() ? View.GONE : View.VISIBLE);
     holder.pathLabel.setTextColor(labelColor);
     holder.path.setEllipsize(ellipsize);
     holder.path.setText(value);
@@ -225,6 +239,16 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
     return compact;
   }
 
+  private static String formatBytes(Context context, long bytes) {
+    if (bytes < 1024) {
+      return context.getString(R.string.cache_size_bytes, bytes);
+    }
+    if (bytes < 1024L * 1024L) {
+      return context.getString(R.string.cache_size_kb, bytes / 1024.0);
+    }
+    return context.getString(R.string.cache_size_mb, bytes / (1024.0 * 1024.0));
+  }
+
   public void submitList(List<DownloadTask> newList) {
     List<DownloadTask> target = newList == null ? List.of() : newList;
     var diffResult =
@@ -251,6 +275,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
                 DownloadTask newT = target.get(newPos);
                 return oldT.getStatus() == newT.getStatus()
                     && oldT.getProgress() == newT.getProgress()
+                    && oldT.getOccupiedBytes() == newT.getOccupiedBytes()
                     && (oldT.getError() == null
                         ? newT.getError() == null
                         : oldT.getError().equals(newT.getError()));
@@ -283,7 +308,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
 
   static class DownloadViewHolder extends RecyclerView.ViewHolder {
     final ImageView thumbnail, typeIcon;
-    final TextView title, pathLabel, path, status;
+    final TextView title, pathLabel, path, status, size;
     final LinearProgressIndicator progress;
     final com.google.android.material.button.MaterialButton retryButton;
     final View moreButton;
@@ -299,6 +324,7 @@ public class DownloadAdapter extends RecyclerView.Adapter<DownloadAdapter.Downlo
       pathLabel = itemView.findViewById(R.id.downloadPathLabel);
       path = itemView.findViewById(R.id.downloadPath);
       status = itemView.findViewById(R.id.downloadStatus);
+      size = itemView.findViewById(R.id.downloadSize);
       progress = itemView.findViewById(R.id.downloadProgress);
       retryButton = itemView.findViewById(R.id.downloadRetry);
       moreButton = itemView.findViewById(R.id.downloadMore);

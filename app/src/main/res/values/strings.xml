@@ -18,8 +18,6 @@
     <string name="download_status_failed_short">Failed</string>
     <string name="download_error_label">Error:</string>
     <string name="download_error_summary">Error: %1$s</string>
-    <string name="download_save_path_label">Saved to:</string>
-    <string name="download_save_path">Saved to: %1$s</string>
     <string name="download_path_copied">Path copied to clipboard</string>
     <string name="download_error_unknown">Unknown error</string>
     <string name="hint_enter_url">Enter share link or text</string>
@@ -53,6 +51,9 @@
     <string name="home_selected_count">Selected: %1$d</string>
     <string name="resource_load_failed">Load failed: %1$s</string>
     <string name="resource_no_works_found">No works found or unsupported link type</string>
+    <string name="resource_filter_all">All</string>
+    <string name="resource_filter_images">Images</string>
+    <string name="resource_filter_videos">Videos</string>
     <string name="resource_collected_resources">Collected Resources</string>
     <string name="resource_work_detail">Work Detail</string>
     <string name="resource_download_to_view">Please download to view contents</string>
@@ -66,7 +67,6 @@
     <string name="download_child_photo">Photo %1$02d</string>
     <string name="download_child_cover">Cover</string>
     <string name="download_child_video">Video</string>
-    <string name="language_default">English</string>
     <string name="cache_size_initial">0 MB</string>
     <string name="cache_size_bytes">%1$d B</string>
     <string name="cache_size_kb">%1$.2f KB</string>
@@ -91,6 +91,10 @@
     <string name="settings_status_set">Set</string>
     <string name="settings_status_request_only">Set (Not logged in)</string>
     <string name="settings_status_unset">Unset</string>
+    <string name="cookie_setup_prompt_message">Login requires Cookies setup: Settings -> Cookies</string>
+    <string name="cookie_setup_prompt_positive">Set now</string>
+    <string name="cookie_setup_prompt_negative">Don\'t remind</string>
+    <string name="clipboard_prompt_dismiss">Dismiss</string>
     <string name="generic_media_name">Media</string>
     <string name="generic_work_title">Work</string>
 

@@ -199,6 +199,34 @@ public final class StorageReferenceUtils {
     return "";
   }
 
+  public static long sizeOfReference(@Nullable Context context, @Nullable String reference) {
+    if (reference == null || reference.isBlank()) {
+      return -1L;
+    }
+    if (!isContentReference(reference)) {
+      File file = new File(reference);
+      return file.exists() && file.isFile() ? file.length() : -1L;
+    }
+    Context safeContext = context != null ? context : DYDownloaderApp.getInstance();
+    if (safeContext == null) {
+      return -1L;
+    }
+    try (Cursor cursor =
+        safeContext
+            .getContentResolver()
+            .query(Uri.parse(reference), new String[] {OpenableColumns.SIZE}, null, null, null)) {
+      if (cursor != null && cursor.moveToFirst()) {
+        int columnIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
+        if (columnIndex >= 0) {
+          long size = cursor.getLong(columnIndex);
+          return size >= 0 ? size : -1L;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return -1L;
+  }
+
   private static String normalizeRelativeDir(@Nullable String relativeDir) {
     if (relativeDir == null || relativeDir.isBlank()) {
       return "";

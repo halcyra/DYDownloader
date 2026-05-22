@@ -39,7 +39,7 @@ public class SettingsActivity extends AppCompatActivity {
     currentLanguage = findViewById(R.id.currentLanguage);
     cacheText = findViewById(R.id.cacheSize);
     cookieStatus = findViewById(R.id.cookieStatus);
-    currentLanguage.setText(AppLocaleManager.getLanguageLabel(this, AppPrefs.getLanguageTag(this)));
+    updateCurrentLanguage();
     updateCookieStatus();
 
     findViewById(R.id.layoutLanguage).setOnClickListener(v -> showLanguageDialog());
@@ -57,6 +57,7 @@ public class SettingsActivity extends AppCompatActivity {
   @Override
   protected void onResume() {
     super.onResume();
+    updateCurrentLanguage();
     updateCookieStatus();
   }
 
@@ -65,9 +66,9 @@ public class SettingsActivity extends AppCompatActivity {
       AppLocaleManager.TAG_EN, AppLocaleManager.TAG_ZH_CN, AppLocaleManager.TAG_ZH_TW
     };
     String[] langs = {
-      getString(R.string.language_option_en),
-      getString(R.string.language_option_zh_cn),
-      getString(R.string.language_option_zh_tw)
+      AppLocaleManager.getLanguageLabel(AppLocaleManager.TAG_EN),
+      AppLocaleManager.getLanguageLabel(AppLocaleManager.TAG_ZH_CN),
+      AppLocaleManager.getLanguageLabel(AppLocaleManager.TAG_ZH_TW)
     };
     String current = AppPrefs.getLanguageTag(this);
     int checkedItem = 0;
@@ -83,12 +84,16 @@ public class SettingsActivity extends AppCompatActivity {
             langs,
             checkedItem,
             (dialog, which) -> {
-              currentLanguage.setText(langs[which]);
+              currentLanguage.setText(AppLocaleManager.getLanguageLabel(tags[which]));
               AppLocaleManager.setLocale(this, tags[which]);
               dialog.dismiss();
             })
         .setNegativeButton(R.string.dialog_cancel, null)
         .show();
+  }
+
+  private void updateCurrentLanguage() {
+    currentLanguage.setText(AppLocaleManager.getLanguageLabel(AppPrefs.getLanguageTag(this)));
   }
 
   private void showClearCacheDialog() {

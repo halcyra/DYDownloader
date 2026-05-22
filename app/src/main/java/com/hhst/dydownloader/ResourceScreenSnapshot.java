@@ -76,7 +76,7 @@ final class ResourceScreenSnapshot {
       while ((read = inputStream.read(buffer)) != -1) {
         outputStream.write(buffer, 0, read);
       }
-      return outputStream.toString(StandardCharsets.UTF_8);
+      return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
     }
   }
 
