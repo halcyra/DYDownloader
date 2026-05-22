@@ -5,7 +5,7 @@
 <p align="center">
   <img src="assets/app-icon.svg" alt="DYDownloader App Icon" width="120">
 </p>
-**DYDownloader** 是一个完全开源免费的 **抖音/TikTok** 无水印原图/图集/动图/视频/账号/合集**下载工具**/**安卓APP**。
+DYDownloader 是一个完全开源免费的抖音/TikTok 无水印原图/图集/动图/视频/账号/合集下载工具/安卓APP。
 
 ## 主要功能
 
