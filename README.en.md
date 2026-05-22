@@ -10,10 +10,8 @@ DYDownloader is a fully open-source and free Android app for downloading waterma
 
 ## Features
 
-- Download watermark-free Douyin/TikTok original images, albums, live photos, and videos
-- Parse and download work, account, and collection links
+- Download watermark-free Douyin/TikTok original images, albums, live photos, videos, work, account, and collection.
 - Use local parsing plus official Douyin/TikTok interfaces, with no third-party parsing platforms or relay services
-- Open sourced under GPL-3.0. See [LICENSE](LICENSE)
 
 ## Cookies
 
