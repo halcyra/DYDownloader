@@ -7,6 +7,9 @@
 </p>
 DYDownloader 是一个完全开源免费的抖音/TikTok 无水印原图/图集/动图/视频/账号/合集下载工具/安卓APP。
 
+## 下载链接
+https://github.com/halcyra/DYDownloader/releases/tag/v0.0.3
+
 ## 主要功能
 
 - 抖音/TikTok无水印原图、图集、动图、视频下载，作品、账号、合集链接解析与下载
