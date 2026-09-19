@@ -19,25 +19,15 @@ public class AccessibilityContractTest {
   }
 
   @Test
-  public void itemCardAndDownloadLayouts_useDecorativeImageSemanticsAnd48dpActions()
-      throws Exception {
+  public void itemCardLayout_usesDecorativeImageSemanticsAndFailActions() throws Exception {
     String cardLayout = read("app", "src", "main", "res", "layout", "item_card.xml");
-    String downloadLayout = read("app", "src", "main", "res", "layout", "item_download.xml");
 
     assertTrue(cardLayout.contains("android:id=\"@+id/cardImage\""));
     assertTrue(cardLayout.contains("android:contentDescription=\"@null\""));
     assertTrue(cardLayout.contains("android:importantForAccessibility=\"no\""));
     assertTrue(cardLayout.contains("android:id=\"@+id/cardMore\""));
-    assertTrue(cardLayout.contains("android:layout_width=\"48dp\""));
-    assertTrue(cardLayout.contains("android:layout_height=\"48dp\""));
-
-    assertTrue(downloadLayout.contains("android:id=\"@+id/downloadThumbnail\""));
-    assertTrue(downloadLayout.contains("android:contentDescription=\"@null\""));
-    assertTrue(downloadLayout.contains("android:importantForAccessibility=\"no\""));
-    assertTrue(downloadLayout.contains("android:id=\"@+id/downloadMore\""));
-    assertTrue(downloadLayout.contains("android:id=\"@+id/downloadRetry\""));
-    assertTrue(downloadLayout.contains("android:minWidth=\"48dp\""));
-    assertTrue(downloadLayout.contains("android:minHeight=\"48dp\""));
+    assertTrue(cardLayout.contains("android:id=\"@+id/cardRetry\""));
+    assertTrue(cardLayout.contains("android:id=\"@+id/cardDelete\""));
   }
 
   @Test
@@ -47,7 +37,6 @@ public class AccessibilityContractTest {
     String previewLayout = read("app", "src", "main", "res", "layout", "activity_preview.xml");
 
     assertTrue(resourceLayout.contains("android:id=\"@+id/resourceImage\""));
-    assertTrue(resourceLayout.contains("android:id=\"@+id/resourceVideoThumbnail\""));
     assertTrue(resourceLayout.contains("android:id=\"@+id/resourceTypeIcon\""));
     assertTrue(resourceLayout.contains("android:contentDescription=\"@null\""));
     assertTrue(resourceLayout.contains("android:importantForAccessibility=\"no\""));

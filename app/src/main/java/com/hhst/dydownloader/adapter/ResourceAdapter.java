@@ -6,7 +6,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.view.ViewCompat;
@@ -105,13 +104,12 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
           .error(item.imageResId())
           .into(holder.resourceImage);
     } else {
+      Picasso.get().cancelRequest(holder.resourceImage);
       holder.resourceImage.setImageResource(item.imageResId());
     }
 
     holder.resourceTypeIcon.setImageResource(item.type().getIconResId());
 
-    holder.resourceVideoRow.setVisibility(View.GONE);
-    holder.resourceImage.setVisibility(View.VISIBLE);
     if (item.text() != null && !item.text().isBlank()) {
       holder.resourceText.setText(item.text());
       holder.resourceText.setVisibility(View.VISIBLE);
@@ -130,31 +128,39 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
       Context context = holder.checkContainer.getContext();
       boolean isDownloaded = selectionState != null && selectionState.isDownloaded(item);
       boolean isQueued = selectionState != null && selectionState.isQueued(item);
-      boolean isSelected =
-          isDownloaded || (selectionState != null && selectionState.isSelected(item));
-      boolean unavailable = isQueued || isDownloaded;
+      boolean isSelected = selectionState != null && selectionState.isSelected(item);
       String stateDescription =
           context.getString(
-              unavailable
+              isQueued
                   ? R.string.resource_check_disabled_state
                   : isSelected
                       ? R.string.resource_check_selected_state
-                      : R.string.resource_check_unselected_state);
+                      : isDownloaded
+                          ? R.string.resource_check_downloaded_state
+                          : R.string.resource_check_unselected_state);
 
       holder.checkContainer.setVisibility(View.VISIBLE);
       ViewCompat.setStateDescription(holder.checkContainer, stateDescription);
       holder.checkContainer.setContentDescription(
           context.getString(R.string.resource_check_container_desc));
-      holder.checkIcon.setVisibility(isSelected ? View.VISIBLE : View.INVISIBLE);
-      holder.checkContainer.setAlpha(unavailable ? 0.48f : 1f);
-      holder.checkContainer.setEnabled(!unavailable);
-      holder.checkContainer.setClickable(!unavailable);
-      holder.checkContainer.setFocusable(!unavailable);
+      holder.checkIcon.setVisibility(isSelected || isDownloaded ? View.VISIBLE : View.INVISIBLE);
+      if (isDownloaded && !isSelected) {
+        holder.checkIcon.setColorFilter(
+            com.google.android.material.color.MaterialColors.getColor(
+                holder.checkIcon,
+                com.google.android.material.R.attr.colorOnSurfaceVariant));
+      } else {
+        holder.checkIcon.clearColorFilter();
+      }
+      holder.checkContainer.setAlpha(isQueued ? 0.48f : 1f);
+      holder.checkContainer.setEnabled(!isQueued);
+      holder.checkContainer.setClickable(!isQueued);
+      holder.checkContainer.setFocusable(!isQueued);
       holder.checkContainer.setBackgroundResource(
           isSelected ? R.drawable.bg_check_container_selected : R.drawable.bg_check_container);
       holder.checkContainer.setOnClickListener(
           v -> {
-            if (unavailable) {
+            if (isQueued) {
               return;
             }
             listener.onResourceSelectToggle(item, position);
@@ -188,19 +194,15 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
   }
 
   static class ResourceViewHolder extends RecyclerView.ViewHolder {
-    final ImageView resourceImage, resourceVideoThumbnail, resourceTypeIcon, checkIcon;
-    final TextView resourceText, resourceVideoTitle;
-    final LinearLayout resourceVideoRow;
+    final ImageView resourceImage, resourceTypeIcon, checkIcon;
+    final TextView resourceText;
     final View checkContainer;
 
     ResourceViewHolder(@NonNull View itemView) {
       super(itemView);
       resourceImage = itemView.findViewById(R.id.resourceImage);
-      resourceVideoRow = itemView.findViewById(R.id.resourceVideoRow);
-      resourceVideoThumbnail = itemView.findViewById(R.id.resourceVideoThumbnail);
       resourceTypeIcon = itemView.findViewById(R.id.resourceTypeIcon);
       resourceText = itemView.findViewById(R.id.resourceText);
-      resourceVideoTitle = itemView.findViewById(R.id.resourceVideoTitle);
       checkContainer = itemView.findViewById(R.id.resourceCheckContainer);
       checkIcon = itemView.findViewById(R.id.resourceCheckIcon);
     }

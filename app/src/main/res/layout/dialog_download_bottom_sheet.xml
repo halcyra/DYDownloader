@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp"
-        android:text="@string/download_title"
+        android:text="@string/download"
         android:textColor="?attr/colorOnSurface"
         android:textSize="24sp"
         android:textStyle="bold" />

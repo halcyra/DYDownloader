@@ -3,15 +3,46 @@ package com.hhst.dydownloader.util;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 
 public final class StoragePathUtils {
   public static final String PUBLIC_DOWNLOADS_DISPLAY_ROOT = "Download/DYDownloader";
   public static final String PUBLIC_DOWNLOADS_DIRECTORY_NAME = "DYDownloader";
+  public static final String DEFAULT_FILE_NAME_TEMPLATE = "{desc}";
   private static final int MAX_SEGMENT_LENGTH = 48;
   private static final int MAX_FILE_NAME_LENGTH = 96;
+  private static final Pattern TEMPLATE_FIELD = Pattern.compile("\\{(author|desc|date|id)\\}");
 
   private StoragePathUtils() {}
+
+  /**
+   * 展开文件名模板，占位符：{author} 作者、{desc} 描述、{date} 日期、{id} 作品 ID。
+   * 未知占位符原样保留；空占位符留下的连续分隔下划线会被折叠。
+   */
+  public static String expandFileNameTemplate(
+      String template, String author, String desc, String date, String id) {
+    String value =
+        template == null || template.isBlank() ? DEFAULT_FILE_NAME_TEMPLATE : template.trim();
+    Matcher matcher = TEMPLATE_FIELD.matcher(value);
+    StringBuffer expanded = new StringBuffer();
+    while (matcher.find()) {
+      String replacement = switch (matcher.group(1)) {
+        case "author" -> author;
+        case "desc" -> desc;
+        case "date" -> date;
+        default -> id;
+      };
+      matcher.appendReplacement(expanded, Matcher.quoteReplacement(nullSafe(replacement)));
+    }
+    matcher.appendTail(expanded);
+    return expanded.toString().replaceAll("_+", "_").replaceAll("^_+|_+$", "");
+  }
+
+  private static String nullSafe(String value) {
+    return value == null ? "" : value.trim();
+  }
 
   public static String joinSegments(String... segments) {
     if (segments == null || segments.length == 0) {

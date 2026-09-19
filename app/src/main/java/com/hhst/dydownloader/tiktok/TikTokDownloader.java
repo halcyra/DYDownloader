@@ -35,20 +35,19 @@ public final class TikTokDownloader {
           "(https?://[^\\s\"<>^`{|}\\uFF0C\\u3002\\uFF1B\\uFF01\\uFF1F\\u3001\\u3010\\u3011\\u300A\\u300B]+)");
   private static final String DETAIL_API = "https://www.tiktok.com/api/item/detail/";
   private static final String ACCOUNT_LIST_API = "https://www.tiktok.com/api/post/item_list/";
-  private static final String COLLECTION_LIST_API =
-      "https://www.tiktok.com/api/collection/item_list/";
+  private static final String COLLECTION_LIST_API = "https://www.tiktok.com/api/mix/item_list/";
   private static final int DEFAULT_MAX_PAGES = 200;
   private static final int ACCOUNT_PAGE_SIZE = 16;
   private static final int COLLECTION_PAGE_SIZE = 30;
   private static final String[] TRUSTED_SHARE_HOSTS = {"tiktok.com"};
+  // 必须与签名使用的 UA 一致（X-Dynosaur 0x30 字段对 User-Agent 做指纹绑定）
   private static final String DEFAULT_USER_AGENT =
-      "Mozilla/5.0 (Linux; Android 14; Pixel 7) "
-          + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36";
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+          + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
   private static final String DEFAULT_REFERER = "https://www.tiktok.com/explore";
 
   private final OkHttpClient httpClient;
   private final ObjectMapper objectMapper;
-  private final TikTokRequestSigner requestSigner;
   private final TikTokDeviceIdResolver deviceIdResolver;
   private final String defaultCookie;
   private volatile String cachedDeviceId = "";
@@ -65,7 +64,6 @@ public final class TikTokDownloader {
   public TikTokDownloader(OkHttpClient httpClient, String cookie) {
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.objectMapper = new ObjectMapper();
-    this.requestSigner = new TikTokRequestSigner();
     this.deviceIdResolver = new TikTokDeviceIdResolver(httpClient);
     this.defaultCookie = normalizeCookie(cookie);
   }
@@ -280,17 +278,16 @@ public final class TikTokDownloader {
   private JsonNode fetchItemDetail(String itemId, DeviceCookieContext deviceContext)
       throws TikTokDetailFetchException {
     String msToken = extractCookieField(deviceContext.cookie(), "msToken");
-    Map<String, String> params = buildBaseParams();
+    Map<String, String> params = buildBaseParams(deviceContext.deviceId());
     params.put("itemId", itemId);
-    String query =
-        requestSigner.sign(params, DEFAULT_USER_AGENT, deviceContext.deviceId(), msToken);
+    String query = TikTokRequestSigner.sign(params, DEFAULT_USER_AGENT, msToken);
     String apiUrl = DETAIL_API + "?" + query;
 
     try {
       Request request =
           requestBuilder(apiUrl, deviceContext.cookie())
               .get()
-              .header("Accept", "application/json, text/plain, */*")
+              .header("Accept", "*/*")
               .build();
       try (Response response = httpClient.newCall(request).execute()) {
         ResponseBody body = response.body();
@@ -413,16 +410,16 @@ public final class TikTokDownloader {
     LinkedHashSet<String> seenItemIds = new LinkedHashSet<>();
 
     while (hasMore && pageCount < DEFAULT_MAX_PAGES) {
-      Map<String, String> params = buildBaseParams();
+      Map<String, String> params = buildBaseParams(deviceId);
       params.put("secUid", secUid);
       params.put("count", String.valueOf(ACCOUNT_PAGE_SIZE));
       params.put("cursor", cursor);
       params.put("coverFormat", "2");
       params.put("post_item_list_request_type", "0");
       params.put("needPinnedItemIds", "true");
-      params.put("video_encoding", "mp4");
+      params.put("video_encoding", "dash");
 
-      JsonNode pageData = fetchItemPage(ACCOUNT_LIST_API, params, deviceId, cookie, "account");
+      JsonNode pageData = fetchItemPage(ACCOUNT_LIST_API, params, cookie, "account");
       int newItems = appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "account");
       hasMore = parseHasMore(pageData.path("hasMore"));
       String nextCursor = parseCursor(pageData.path("cursor"), cursor);
@@ -451,14 +448,13 @@ public final class TikTokDownloader {
     LinkedHashSet<String> seenItemIds = new LinkedHashSet<>();
 
     while (hasMore && pageCount < DEFAULT_MAX_PAGES) {
-      Map<String, String> params = buildBaseParams();
+      Map<String, String> params = buildBaseParams(deviceId);
       params.put("count", String.valueOf(COLLECTION_PAGE_SIZE));
       params.put("cursor", cursor);
       params.put("collectionId", collectionId);
       params.put("sourceType", "113");
 
-      JsonNode pageData =
-          fetchItemPage(COLLECTION_LIST_API, params, deviceId, cookie, "collection");
+      JsonNode pageData = fetchItemPage(COLLECTION_LIST_API, params, cookie, "collection");
       int newItems = appendUniqueItems(pageData.path("itemList"), items, seenItemIds, "collection");
       hasMore = parseHasMore(pageData.path("hasMore"));
       String nextCursor = parseCursor(pageData.path("cursor"), cursor);
@@ -477,15 +473,15 @@ public final class TikTokDownloader {
   }
 
   private JsonNode fetchItemPage(
-      String apiUrl, Map<String, String> params, String deviceId, String cookie, String type)
+      String apiUrl, Map<String, String> params, String cookie, String type)
       throws TikTokWorkListFetchException {
     String msToken = extractCookieField(cookie, "msToken");
-    String query = requestSigner.sign(params, DEFAULT_USER_AGENT, deviceId, msToken);
+    String query = TikTokRequestSigner.sign(params, DEFAULT_USER_AGENT, msToken);
     try {
       Request request =
           requestBuilder(apiUrl + "?" + query, cookie)
               .get()
-              .header("Accept", "application/json, text/plain, */*")
+              .header("Accept", "*/*")
               .build();
       try (Response response = httpClient.newCall(request).execute()) {
         ResponseBody body = response.body();
@@ -575,7 +571,7 @@ public final class TikTokDownloader {
     }
   }
 
-  private Map<String, String> buildBaseParams() {
+  private Map<String, String> buildBaseParams(String deviceId) {
     Map<String, String> params = new LinkedHashMap<>();
     params.put("WebIdLastTime", String.valueOf(System.currentTimeMillis() / 1000L));
     params.put("aid", "1988");
@@ -584,12 +580,13 @@ public final class TikTokDownloader {
     params.put("browser_language", "zh-SG");
     params.put("browser_name", "Mozilla");
     params.put("browser_online", "true");
-    params.put("browser_platform", "Android");
-    params.put("browser_version", DEFAULT_USER_AGENT);
+    params.put("browser_platform", "MacIntel");
+    params.put("browser_version", "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36");
     params.put("channel", "tiktok_web");
     params.put("cookie_enabled", "true");
     params.put("data_collection_enabled", "true");
-    params.put("device_platform", "web_mobile");
+    params.put("device_id", deviceId == null ? "" : deviceId);
+    params.put("device_platform", "web_pc");
     params.put("enable_cache", "true");
     params.put("focus_state", "true");
     params.put("from_page", "user");
@@ -597,12 +594,12 @@ public final class TikTokDownloader {
     params.put("is_fullscreen", "false");
     params.put("is_page_visible", "true");
     params.put("language", "en");
-    params.put("os", "android");
+    params.put("os", "mac");
     params.put("priority_region", "US");
     params.put("referer", "");
     params.put("region", "US");
-    params.put("screen_height", "915");
-    params.put("screen_width", "412");
+    params.put("screen_height", "864");
+    params.put("screen_width", "1536");
     params.put("tz_name", "Asia/Shanghai");
     params.put("user_is_login", "true");
     params.put("webcast_language", "en");

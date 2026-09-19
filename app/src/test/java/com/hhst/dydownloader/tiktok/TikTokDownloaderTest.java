@@ -287,7 +287,7 @@ public class TikTokDownloaderTest {
                     "{\"wid\":\"7350000000000000000\"}",
                     "msToken=resolved-token; Path=/");
               }
-              if ("/api/collection/item_list/".equals(encodedPath)) {
+              if ("/api/mix/item_list/".equals(encodedPath)) {
                 String cursor = request.url().queryParameter("cursor");
                 if ("1".equals(cursor)) {
                   return response(
@@ -368,7 +368,7 @@ public class TikTokDownloaderTest {
                     "text/html",
                     "<html>\"canonical\":\"https://www.tiktok.com/@creator/collection/list-7345678901234567890\"</html>");
               }
-              if ("/api/collection/item_list/".equals(encodedPath)) {
+              if ("/api/mix/item_list/".equals(encodedPath)) {
                 assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
                 return response(
                     request,
@@ -400,7 +400,7 @@ public class TikTokDownloaderTest {
               if ("/@creator".equals(encodedPath)) {
                 return response(request, 200, "text/html", "<html>playlist query</html>");
               }
-              if ("/api/collection/item_list/".equals(encodedPath)) {
+              if ("/api/mix/item_list/".equals(encodedPath)) {
                 assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
                 return response(
                     request,
@@ -434,7 +434,7 @@ public class TikTokDownloaderTest {
               if ("/@creator".equals(encodedPath)) {
                 return response(request, 200, "text/html", "<html>lowercase collection id query</html>");
               }
-              if ("/api/collection/item_list/".equals(encodedPath)) {
+              if ("/api/mix/item_list/".equals(encodedPath)) {
                 assertEquals("7345678901234567890", request.url().queryParameter("collectionId"));
                 return response(
                     request,
@@ -488,7 +488,7 @@ public class TikTokDownloaderTest {
                         + accountVideoItem("7345678901234567890")
                         + "],\"hasMore\":false,\"cursor\":\"0\"}");
               }
-              if ("/api/collection/item_list/".equals(encodedPath)) {
+              if ("/api/mix/item_list/".equals(encodedPath)) {
                 return response(
                     request,
                     200,

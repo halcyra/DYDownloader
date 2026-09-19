@@ -23,10 +23,12 @@ public final class ShareLinkResolver {
     }
     String url = firstUrl.get();
     if (isHostInAllowList(url, TIKTOK_HOST_SUFFIXES)) {
-      return new Result(Platform.TIKTOK, inferTikTokKind(url), url);
+      LinkKind kind = inferTikTokKind(url);
+      return kind == LinkKind.UNKNOWN ? Result.unsupported() : new Result(Platform.TIKTOK, kind, url);
     }
     if (isHostInAllowList(url, DOUYIN_HOST_SUFFIXES)) {
-      return new Result(Platform.DOUYIN, inferDouyinKind(url), url);
+      LinkKind kind = inferDouyinKind(url);
+      return kind == LinkKind.UNKNOWN ? Result.unsupported() : new Result(Platform.DOUYIN, kind, url);
     }
     return Result.unsupported();
   }
@@ -67,37 +69,64 @@ public final class ShareLinkResolver {
   }
 
   private static LinkKind inferDouyinKind(String url) {
-    String normalized = normalize(url);
-    if (normalized.contains("/collection/")
-        || normalized.contains("mix_id=")
-        || normalized.contains("mixid=")
-        || normalized.contains("collectionid=")) {
+    URI uri = URI.create(url);
+    String host = normalize(uri.getHost());
+    String path = normalize(uri.getPath());
+    String query = normalize(uri.getRawQuery());
+    if (path.matches("^/(?:video|note|share/video|share/note)/\\d{19}(?:/.*)?$")
+        || hasQueryValueMatching(query, "\\d{19}", "modal_id", "aweme_id")) {
+      return LinkKind.WORK;
+    }
+    if (path.matches("^/(?:share/)?collection/\\d{5,25}/?$")
+        || hasNumericQueryValue(query, "mix_id", "mixid", "collectionid")) {
       return LinkKind.MIX;
     }
-    if (normalized.contains("/user/")
-        || normalized.contains("sec_user_id=")
-        || normalized.contains("secuid=")) {
+    if (path.matches("^/(?:share/)?user/[^/]+/?$")
+        || hasQueryValue(query, "sec_user_id", "secuid")) {
       return LinkKind.ACCOUNT;
     }
-    return LinkKind.WORK;
+    if (host.equals("v.douyin.com") && path.length() > 1) {
+      return LinkKind.WORK;
+    }
+    return LinkKind.UNKNOWN;
   }
 
   private static LinkKind inferTikTokKind(String url) {
-    String normalized = normalize(url);
-    if (normalized.contains("/collection/")
-        || normalized.contains("/playlist/")
-        || normalized.contains("collectionid=")
-        || normalized.contains("playlistid=")) {
+    URI uri = URI.create(url);
+    String host = normalize(uri.getHost());
+    String path = normalize(uri.getPath());
+    String query = normalize(uri.getRawQuery());
+    if (path.matches("^/@[^/]+/(?:collection|playlist)/.+")
+        || hasNumericQueryValue(query, "collectionid", "playlistid")) {
       return LinkKind.MIX;
     }
-    if (normalized.contains("/@")
-        && !normalized.contains("/video/")
-        && !normalized.contains("/photo/")
-        && !normalized.contains("/collection/")
-        && !normalized.contains("/playlist/")) {
+    if (path.matches("^/@[^/]+/?$")) {
       return LinkKind.ACCOUNT;
     }
-    return LinkKind.WORK;
+    if (((host.equals("vm.tiktok.com") || host.equals("vt.tiktok.com")) && path.length() > 1)
+        || path.matches("^/t/[^/]+/?$")
+        || path.matches("^/@[^/]+/(?:video|photo)/\\d{19}(?:/.*)?$")) {
+      return LinkKind.WORK;
+    }
+    return LinkKind.UNKNOWN;
+  }
+
+  private static boolean hasNumericQueryValue(String query, String... names) {
+    return hasQueryValueMatching(query, "\\d{5,25}", names);
+  }
+
+  private static boolean hasQueryValue(String query, String... names) {
+    return hasQueryValueMatching(query, "[^&]+", names);
+  }
+
+  private static boolean hasQueryValueMatching(String query, String valuePattern, String... names) {
+    if (query.isBlank()) return false;
+    for (String name : names) {
+      if (Pattern.compile("(?:^|&)" + name + "=" + valuePattern + "(?:&|$)")
+          .matcher(query)
+          .find()) return true;
+    }
+    return false;
   }
 
   private static String normalize(String text) {

@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 
 @Database(
     entities = {ResourceEntity.class, DownloadTaskEntity.class},
-    version = 7,
+    version = 8,
     exportSchema = false)
 @TypeConverters({Converters.class})
 public abstract class AppDatabase extends RoomDatabase {
@@ -155,8 +155,17 @@ public abstract class AppDatabase extends RoomDatabase {
               "download_tasks_new");
         }
       };
+  private static final Migration MIGRATION_7_8 =
+      new Migration(7, 8) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+          database.execSQL("ALTER TABLE resources ADD COLUMN authorNickname TEXT");
+          database.execSQL("ALTER TABLE download_tasks ADD COLUMN authorNickname TEXT");
+        }
+      };
   static final Migration[] ALL_MIGRATIONS = {
-    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+    MIGRATION_7_8
   };
   private static volatile AppDatabase instance;
 

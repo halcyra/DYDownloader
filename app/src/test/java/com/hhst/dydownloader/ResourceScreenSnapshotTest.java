@@ -19,6 +19,11 @@ import org.junit.Test;
 public class ResourceScreenSnapshotTest {
 
   @Test
+  public void snapshot_rejectsIncompleteLegacyAndroidRecords() throws Exception {
+    assertTrue(restore(null, "[{\"leaf\":true}]").isEmpty());
+  }
+
+  @Test
   public void snapshot_persistsNestedResourceItemsOutsideBundlePayload() throws Exception {
     ResourceItem child =
         new ResourceItem(
@@ -27,6 +32,7 @@ public class ResourceScreenSnapshotTest {
             7L,
             CardType.VIDEO.getIconResId(),
             "Video",
+            "Creator",
             CardType.VIDEO,
             2L,
             0,
@@ -45,6 +51,7 @@ public class ResourceScreenSnapshotTest {
             0L,
             CardType.ALBUM.getIconResId(),
             "Work",
+            "Creator",
             CardType.ALBUM,
             1L,
             1,

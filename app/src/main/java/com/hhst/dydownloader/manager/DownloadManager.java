@@ -2,8 +2,6 @@ package com.hhst.dydownloader.manager;
 
 import android.content.Context;
 import android.util.Log;
-import android.os.Handler;
-import android.os.Looper;
 import com.hhst.dydownloader.AppPrefs;
 import com.hhst.dydownloader.R;
 import com.hhst.dydownloader.db.AppDatabase;
@@ -19,9 +17,12 @@ import com.hhst.dydownloader.model.ResourceItem;
 import com.hhst.dydownloader.util.StoragePathUtils;
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,7 +35,6 @@ public class DownloadManager {
   private final AppDatabase database;
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final AtomicBoolean isProcessing = new AtomicBoolean(false);
-  private final Handler mainHandler = new Handler(Looper.getMainLooper());
   private final OkHttpClient httpClient;
   private final ResourceDao resourceDao;
   private final DownloadPayloadFactory payloadFactory = new DownloadPayloadFactory();
@@ -95,20 +95,22 @@ public class DownloadManager {
     task.setStatus(DownloadTask.Status.DOWNLOADING);
     task.setProgress(0);
     task.setError(null);
-    postToMain(() -> DownloadQueue.updateTask(task));
+    DownloadQueue.updateTask(task);
 
     File tempDownloadDir = downloadStorage.tempDirectory();
 
     ResourceItem item = task.getResourceItem();
     try {
+      DownloadQueue.requireActive(task);
       if (item == null) {
         throw new IOException("Empty task");
       }
       String cookie = AppPrefs.getCookie(context, item.platform());
 
       DownloadPayload payload = payloadFactory.build(cookie, item);
+      DownloadQueue.requireActive(task);
       String relativeDir = resolveDownloadRelativeDir(item);
-      String baseName = sanitizeFileBaseName(item);
+      String baseName = buildFileBaseName(payload.profile(), item);
 
       HttpDownloader httpDownloader =
           new HttpDownloader(
@@ -121,25 +123,16 @@ public class DownloadManager {
               : downloadVideo(
                   httpDownloader, tempDownloadDir, relativeDir, baseName, payload, task);
 
-      saveWorkToHome(item, payload.profile(), assets, payload.imagePost());
-
-      task.setStatus(DownloadTask.Status.COMPLETED);
-      task.setProgress(100);
-      postToMain(() -> DownloadQueue.updateTask(task));
+      DownloadQueue.completeTask(
+          task, () -> saveWorkToHome(item, payload.profile(), assets, payload.imagePost()));
+    } catch (CancellationException ignored) {
+      // The queue owns cancellation; removed tasks must not be persisted again.
     } catch (Exception e) {
       Log.e(TAG, "Download failed for " + describeTask(task), e);
       String errorMsg = getCompactErrorMessage(e);
       task.setStatus(DownloadTask.Status.FAILED);
       task.setError(errorMsg);
-      postToMain(() -> DownloadQueue.updateTask(task));
-    }
-  }
-
-  private void postToMain(Runnable r) {
-    if (Looper.myLooper() == Looper.getMainLooper()) {
-      r.run();
-    } else {
-      mainHandler.post(r);
+      DownloadQueue.updateTask(task);
     }
   }
 
@@ -178,6 +171,7 @@ public class DownloadManager {
     ArrayList<DownloadedAsset> assets = new ArrayList<>(total);
 
     for (int i = 0; i < total; i++) {
+      DownloadQueue.requireActive(task);
       String url = urls.get(i);
       int index = i;
       MediaType mediaType = payload.mediaTypeAt(i);
@@ -195,8 +189,7 @@ public class DownloadManager {
           out,
           (p, downloaded, tot) -> {
             int overall = (int) (((index * 100.0) + p) / total);
-            task.setProgress(Math.min(99, Math.max(0, overall)));
-            postToMain(() -> DownloadQueue.updateTask(task));
+            updateProgress(task, overall);
           },
           expectedContent);
       String mediaReference =
@@ -214,7 +207,8 @@ public class DownloadManager {
                 relativeDir,
                 baseName,
                 String.format(Locale.ROOT, "%02d", i + 1),
-                payload.coverUrlAt(i));
+                payload.coverUrlAt(i),
+                task);
       }
       assets.add(new DownloadedAsset(mediaType, mediaReference, coverReference));
     }
@@ -242,10 +236,7 @@ public class DownloadManager {
         httpDownloader.download(
             url,
             out,
-            (p, downloaded, tot) -> {
-              task.setProgress(Math.min(99, Math.max(0, p)));
-              postToMain(() -> DownloadQueue.updateTask(task));
-            },
+            (p, downloaded, tot) -> updateProgress(task, p),
             HttpDownloader.ExpectedContent.VIDEO);
         String mediaReference =
             downloadStorage.storeDownloadedFile(out, relativeDir, out.getName(), "video/mp4");
@@ -256,7 +247,8 @@ public class DownloadManager {
                 relativeDir,
                 baseName,
                 "01",
-                payload.coverUrlAt(0));
+                payload.coverUrlAt(0),
+                task);
         return List.of(new DownloadedAsset(MediaType.VIDEO, mediaReference, coverReference));
       } catch (IOException e) {
         last = e;
@@ -274,38 +266,64 @@ public class DownloadManager {
       String relativeDir,
       String baseName,
       String indexToken,
-      String coverUrl) {
+      String coverUrl,
+      DownloadTask task) {
+    DownloadQueue.requireActive(task);
     if (coverUrl == null || coverUrl.isBlank()) {
       return "";
     }
     File out = new File(tempDownloadDir, baseName + "_" + indexToken + "_cover.jpg");
     try {
-      httpDownloader.download(coverUrl, out, null, HttpDownloader.ExpectedContent.IMAGE);
+      httpDownloader.download(
+          coverUrl,
+          out,
+          (p, downloaded, total) -> DownloadQueue.requireActive(task),
+          HttpDownloader.ExpectedContent.IMAGE);
       return downloadStorage.storeDownloadedFile(out, relativeDir, out.getName(), "image/jpeg");
     } catch (IOException ignored) {
       return "";
     }
   }
 
-  private String sanitizeFileBaseName(ResourceItem item) {
-    String raw = item != null ? item.text() : "";
-    if (raw == null) {
-      raw = "";
+  static String resolveAuthorNickname(AwemeProfile profile, ResourceItem item) {
+    if (profile != null && profile.authorNickname() != null && !profile.authorNickname().isBlank()) {
+      return profile.authorNickname().trim();
     }
-    raw = raw.trim();
-    if (raw.isEmpty()) {
-      raw = item != null ? item.sourceKey() : "";
+    return item == null ? "" : item.authorNickname().trim();
+  }
+
+  private void updateProgress(DownloadTask task, int progress) {
+    DownloadQueue.requireActive(task);
+    int clamped = Math.min(99, Math.max(0, progress));
+    if (task.getProgress() != clamped) {
+      task.setProgress(clamped);
+      DownloadQueue.updateTask(task);
     }
-    if (raw == null || raw.trim().isEmpty()) {
-      raw = context.getString(R.string.generic_media_name);
+  }
+
+  private String buildFileBaseName(AwemeProfile profile, ResourceItem item) {
+    String genericName = context.getString(R.string.generic_media_name);
+    String desc = item != null && item.text() != null ? item.text().trim() : "";
+    if (desc.isEmpty() && item != null && item.sourceKey() != null) {
+      desc = item.sourceKey().trim();
     }
-    String normalized =
-        StoragePathUtils.sanitizeSegment(raw, context.getString(R.string.generic_media_name));
+    long createTime =
+        profile != null && profile.createTime() > 0
+            ? profile.createTime() * 1000L
+            : item != null ? item.createTime() : 0L;
+    String expanded =
+        StoragePathUtils.expandFileNameTemplate(
+            AppPrefs.getFileNameTemplate(context),
+            resolveAuthorNickname(profile, item),
+            desc,
+            new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date(createTime)),
+            SourceKeyUtils.baseOf(item != null ? item.sourceKey() : ""));
+    String normalized = StoragePathUtils.sanitizeSegment(expanded, genericName);
     if (normalized.isEmpty()) {
-      normalized = context.getString(R.string.generic_media_name);
+      normalized = genericName;
     }
 
-    // Ensure uniqueness using awemeId if available.
+    // 同名作品依靠来源哈希后缀保持文件名唯一
     if (item != null && item.sourceKey() != null && !item.sourceKey().isBlank()) {
       normalized = normalized + "_" + StoragePathUtils.stableToken(item.sourceKey());
     }
@@ -320,7 +338,7 @@ public class DownloadManager {
     if (item.storageDir() != null && !item.storageDir().isBlank()) {
       return item.storageDir().trim();
     }
-    return StoragePathUtils.joinSegments(item.text());
+    return "";
   }
 
   private void saveWorkToHome(
@@ -350,13 +368,14 @@ public class DownloadManager {
               profile != null && profile.thumbnailUrl() != null && !profile.thumbnailUrl().isBlank()
                   ? profile.thumbnailUrl()
                   : item.thumbnailUrl();
+          String authorNickname = resolveAuthorNickname(profile, item);
           int expectedChildren =
               imagePost
                       && profile != null
                       && profile.thumbnailUrls() != null
                       && !profile.thumbnailUrls().isEmpty()
-                  ? Math.max(profile.thumbnailUrls().size(), countExpectedChildren(assets, true))
-                  : countExpectedChildren(assets, imagePost);
+                  ? Math.max(profile.thumbnailUrls().size(), countExpectedChildren(assets))
+                  : countExpectedChildren(assets);
 
           ResourceEntity root = null;
           if (!normalizedSourceKey.isBlank()) {
@@ -377,6 +396,7 @@ public class DownloadManager {
             root.thumbnailUrl = thumb;
             root.sourceKey = normalizedSourceKey;
             root.downloadPath = assets.get(0).mediaReference();
+            root.authorNickname = authorNickname;
             rootId = resourceDao.insert(root);
           } else {
             rootId = root.id;
@@ -387,6 +407,9 @@ public class DownloadManager {
             root.childrenNum = Math.max(root.childrenNum, expectedChildren);
             root.createTime = now;
             root.thumbnailUrl = thumb;
+            if (!authorNickname.isBlank()) {
+              root.authorNickname = authorNickname;
+            }
             if (root.downloadPath == null || root.downloadPath.isBlank()) {
               root.downloadPath = assets.get(0).mediaReference();
             }
@@ -675,7 +698,7 @@ public class DownloadManager {
     }
   }
 
-  private int countExpectedChildren(List<DownloadedAsset> assets, boolean imagePost) {
+  private int countExpectedChildren(List<DownloadedAsset> assets) {
     if (assets == null || assets.isEmpty()) {
       return 0;
     }
@@ -684,9 +707,7 @@ public class DownloadManager {
       if (asset == null || asset.mediaReference().isBlank()) {
         continue;
       }
-      if (imagePost && asset.mediaType() == MediaType.VIDEO) {
-        count += asset.coverReference().isBlank() ? 1 : 2;
-      } else if (!imagePost && asset.mediaType() == MediaType.VIDEO) {
+      if (asset.mediaType() == MediaType.VIDEO) {
         count += asset.coverReference().isBlank() ? 1 : 2;
       } else {
         count += 1;

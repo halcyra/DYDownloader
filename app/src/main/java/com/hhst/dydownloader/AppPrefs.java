@@ -8,6 +8,7 @@ import android.util.Base64;
 import android.util.Log;
 import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.Platform;
+import com.hhst.dydownloader.util.StoragePathUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.regex.Pattern;
@@ -22,8 +23,8 @@ public final class AppPrefs {
   public static final String KEY_LANGUAGE = "language";
   public static final String KEY_HOME_SORT = "home_sort";
   public static final String KEY_HOME_FILTER = "home_filter";
-  private static final String KEY_COOKIE_SETUP_PROMPT_DISMISSED =
-      "cookie_setup_prompt_dismissed";
+  public static final String KEY_USE_DOWNLOAD_SUBDIRECTORIES = "use_download_subdirectories";
+  public static final String KEY_FILE_NAME_TEMPLATE = "file_name_template";
   private static final String TAG = "AppPrefs";
   private static final String KEY_COOKIE_ENCRYPTED = "cookie_encrypted";
   private static final String KEY_TIKTOK_COOKIE = "cookie_tiktok";
@@ -123,16 +124,6 @@ public final class AppPrefs {
     return hasAuthenticatedCookieValue(platform, getCookie(context, platform));
   }
 
-  public static boolean shouldShowCookieSetupPrompt(Context context) {
-    return !prefs(context).getBoolean(KEY_COOKIE_SETUP_PROMPT_DISMISSED, false)
-        && !hasConfiguredCookie(context, Platform.DOUYIN)
-        && !hasConfiguredCookie(context, Platform.TIKTOK);
-  }
-
-  public static void dismissCookieSetupPrompt(Context context) {
-    prefs(context).edit().putBoolean(KEY_COOKIE_SETUP_PROMPT_DISMISSED, true).apply();
-  }
-
   public static boolean isConfiguredCookieValue(String cookie) {
     return isConfiguredCookieValue(Platform.DOUYIN, cookie);
   }
@@ -195,6 +186,30 @@ public final class AppPrefs {
         .edit()
         .putString(KEY_HOME_FILTER, filterType == null ? "" : filterType.name())
         .apply();
+  }
+
+  public static boolean shouldUseDownloadSubdirectories(Context context) {
+    return prefs(context).getBoolean(KEY_USE_DOWNLOAD_SUBDIRECTORIES, true);
+  }
+
+  public static void setUseDownloadSubdirectories(Context context, boolean enabled) {
+    prefs(context).edit().putBoolean(KEY_USE_DOWNLOAD_SUBDIRECTORIES, enabled).apply();
+  }
+
+  public static String getFileNameTemplate(Context context) {
+    String template = prefs(context).getString(KEY_FILE_NAME_TEMPLATE, "");
+    return template.isBlank()
+        ? StoragePathUtils.DEFAULT_FILE_NAME_TEMPLATE
+        : template.trim();
+  }
+
+  public static void setFileNameTemplate(Context context, String template) {
+    String value = template == null ? "" : template.trim();
+    if (value.isBlank()) {
+      prefs(context).edit().remove(KEY_FILE_NAME_TEMPLATE).apply();
+    } else {
+      prefs(context).edit().putString(KEY_FILE_NAME_TEMPLATE, value).apply();
+    }
   }
 
   private static String normalizeCookie(String cookie) {

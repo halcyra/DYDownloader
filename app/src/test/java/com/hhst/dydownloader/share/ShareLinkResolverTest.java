@@ -11,6 +11,18 @@ import org.junit.Test;
 public class ShareLinkResolverTest {
 
   @Test
+  public void resolve_prioritizesWorkOpenedOnAccountPage() {
+    assertEquals(LinkKind.WORK, ShareLinkResolver.resolve(
+        "https://www.douyin.com/user/MS4wLjABAAAA?modal_id=7345678901234567890").kind());
+  }
+
+  @Test
+  public void resolve_acceptsSharedAccountPaths() {
+    assertEquals(LinkKind.ACCOUNT, ShareLinkResolver.resolve(
+        "https://www.iesdouyin.com/share/user/MS4wLjABAAAA").kind());
+  }
+
+  @Test
   public void resolve_detectsTiktokShortLinkAsWork() {
     ShareLinkResolver.Result result =
         ShareLinkResolver.resolve("check https://vm.tiktok.com/ZM1234567/ now");
@@ -44,6 +56,28 @@ public class ShareLinkResolverTest {
     assertEquals(Platform.TIKTOK, result.platform());
     assertEquals(LinkKind.MIX, result.kind());
     assertTrue(result.supported());
+  }
+
+  @Test
+  public void resolve_rejectsUnsupportedPagesOnKnownHosts() {
+    assertFalse(ShareLinkResolver.resolve("https://www.douyin.com/").supported());
+    assertFalse(ShareLinkResolver.resolve("https://www.tiktok.com/explore").supported());
+    assertFalse(ShareLinkResolver.resolve("https://www.douyin.com/search/cats").supported());
+    assertFalse(ShareLinkResolver.resolve("https://www.douyin.com/video/abc").supported());
+    assertFalse(ShareLinkResolver.resolve("https://www.douyin.com/?modal_id=abc").supported());
+  }
+
+  @Test
+  public void resolve_keepsSupportedWorkAndShortLinks() {
+    assertEquals(
+        LinkKind.WORK,
+        ShareLinkResolver.resolve("https://www.douyin.com/video/7345678901234567890").kind());
+    assertEquals(
+        LinkKind.WORK, ShareLinkResolver.resolve("https://v.douyin.com/AbCd123/").kind());
+    assertEquals(
+        LinkKind.WORK,
+        ShareLinkResolver.resolve("https://www.tiktok.com/@creator/photo/7345678901234567890")
+            .kind());
   }
 
   @Test

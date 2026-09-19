@@ -26,6 +26,7 @@ public class DownloadTaskEntity {
   public long parentId;
   public int imageResId;
   public String text;
+  public String authorNickname;
   public com.hhst.dydownloader.model.CardType type;
   public long createTime;
   public int childrenNum;
@@ -49,6 +50,7 @@ public class DownloadTaskEntity {
     entity.parentId = item.parentId() == null ? 0L : item.parentId();
     entity.imageResId = item.imageResId();
     entity.text = item.text();
+    entity.authorNickname = item.authorNickname();
     entity.type = item.type();
     entity.createTime = item.createTime();
     entity.childrenNum = item.childrenNum();
@@ -107,6 +109,7 @@ public class DownloadTaskEntity {
             parentId,
             imageResId,
             text,
+            authorNickname,
             type,
             createTime,
             childrenNum,

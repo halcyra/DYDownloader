@@ -7,10 +7,9 @@ public class DownloadTask {
   private final String taskId;
   private final ResourceItem resourceItem;
   private final long createdAt;
-  private Status status;
-  private int progress; // 0-100
-  private String error;
-  private long occupiedBytes = -1L;
+  private volatile Status status;
+  private volatile int progress;
+  private volatile String error;
 
   public DownloadTask(ResourceItem resourceItem) {
     this(resolveTaskId(resourceItem), resourceItem, System.currentTimeMillis());
@@ -40,7 +39,6 @@ public class DownloadTask {
     copy.status = status;
     copy.progress = progress;
     copy.error = error;
-    copy.occupiedBytes = occupiedBytes;
     return copy;
   }
 
@@ -70,14 +68,6 @@ public class DownloadTask {
 
   public void setError(String error) {
     this.error = error;
-  }
-
-  public long getOccupiedBytes() {
-    return occupiedBytes;
-  }
-
-  public void setOccupiedBytes(long occupiedBytes) {
-    this.occupiedBytes = occupiedBytes;
   }
 
   public String getKey() {

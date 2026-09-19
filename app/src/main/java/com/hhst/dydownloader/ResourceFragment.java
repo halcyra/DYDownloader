@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.hhst.dydownloader.adapter.ResourceAdapter;
 import com.hhst.dydownloader.db.AppDatabase;
 import com.hhst.dydownloader.db.ResourceDao;
@@ -296,7 +297,7 @@ public class ResourceFragment extends Fragment
     final int generation = ++loadGeneration;
     ResourceProbeRouter.Plan probePlan = ResourceProbeRouter.plan(text);
     if (!probePlan.supported()) {
-      showLoadFailed(generation, getString(R.string.invalid_supported_link));
+      showUnsupportedLink(generation);
       return;
     }
     String cookie = AppPrefs.getCookie(requireContext(), probePlan.platform());
@@ -329,7 +330,11 @@ public class ResourceFragment extends Fragment
 
             AggregatedProfiles aggregated = mergeProbeResults(probeFutures);
             if (aggregated.profiles().isEmpty()) {
-              showLoadFailed(generation, getString(R.string.resource_no_works_found));
+              if (aggregated.failed()) {
+                showShareLinkLoadFailed(generation, probePlan.platform());
+              } else {
+                showNoWorksFound(generation);
+              }
               return;
             }
 
@@ -384,20 +389,20 @@ public class ResourceFragment extends Fragment
   private ProbeResult probeCollection(String text, String failurePrefix, ProfileListProbe probe) {
     try {
       List<AwemeProfile> result = probe.load(text);
-      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION);
+      return new ProbeResult(deduplicateProfiles(result), CardType.COLLECTION, false);
     } catch (Exception e) {
       Log.d(TAG, failurePrefix + text, e);
-      return ProbeResult.empty(CardType.COLLECTION);
+      return ProbeResult.failed(CardType.COLLECTION);
     }
   }
 
   private ProbeResult probeWork(String text, String failurePrefix, ProfileProbe probe) {
     try {
       AwemeProfile result = probe.load(text);
-      return new ProbeResult(List.of(result), CardType.ALBUM);
+      return new ProbeResult(List.of(result), CardType.ALBUM, false);
     } catch (Exception e) {
       Log.d(TAG, failurePrefix + text, e);
-      return ProbeResult.empty(CardType.ALBUM);
+      return ProbeResult.failed(CardType.ALBUM);
     }
   }
 
@@ -415,9 +420,21 @@ public class ResourceFragment extends Fragment
     List<AwemeProfile> merged = new ArrayList<>();
     CardType rootType = CardType.ALBUM;
     Set<String> seenIds = new HashSet<>();
+    boolean failed = false;
     for (CompletableFuture<ProbeResult> future : probeFutures) {
-      ProbeResult result = future.getNow(null);
-      if (result == null || result.profiles().isEmpty()) {
+      ProbeResult result;
+      try {
+        result = future.getNow(null);
+      } catch (RuntimeException e) {
+        failed = true;
+        continue;
+      }
+      if (result == null) {
+        failed = true;
+        continue;
+      }
+      failed |= result.failed();
+      if (result.profiles().isEmpty()) {
         continue;
       }
       if (result.rootType() == CardType.COLLECTION) {
@@ -431,7 +448,7 @@ public class ResourceFragment extends Fragment
         }
       }
     }
-    return new AggregatedProfiles(merged, rootType);
+    return new AggregatedProfiles(merged, rootType, failed);
   }
 
   private List<AwemeProfile> deduplicateProfiles(List<AwemeProfile> profiles) {
@@ -455,7 +472,7 @@ public class ResourceFragment extends Fragment
   private void applyLoadedProfiles(
       List<AwemeProfile> allProfiles, CardType rootType, int generation) {
     if (allProfiles == null || allProfiles.isEmpty()) {
-      showLoadFailed(generation, getString(R.string.resource_no_works_found));
+      showNoWorksFound(generation);
       return;
     }
 
@@ -477,6 +494,7 @@ public class ResourceFragment extends Fragment
               -1L,
               rootType.getIconResId(),
               desc,
+              profile.authorNickname(),
               rootType,
               profile.createTime() * 1000L,
               Math.max(1, children.size()),
@@ -634,7 +652,7 @@ public class ResourceFragment extends Fragment
     if (item == null) {
       return false;
     }
-    return mediaFilter == MediaFilter.IMAGES ? item.imagePost() : !item.imagePost();
+    return (mediaFilter == MediaFilter.IMAGES) == item.imagePost();
   }
 
   private void syncFilterButtons() {
@@ -663,6 +681,65 @@ public class ResourceFragment extends Fragment
                   getContext(),
                   getString(R.string.resource_load_failed, safeMessage),
                   Toast.LENGTH_LONG)
+              .show();
+        });
+  }
+
+  private void showUnsupportedLink(int generation) {
+    mainHandler.post(
+        () -> {
+          if (destroyed.get() || generation != loadGeneration || !isAdded() || getView() == null) {
+            return;
+          }
+          inFlightLoad = null;
+          loadingProgress.setVisibility(View.GONE);
+          Toast.makeText(getContext(), R.string.invalid_supported_link, Toast.LENGTH_SHORT).show();
+        });
+  }
+
+  private void showNoWorksFound(int generation) {
+    mainHandler.post(
+        () -> {
+          if (destroyed.get() || generation != loadGeneration || !isAdded() || getView() == null) {
+            return;
+          }
+          inFlightLoad = null;
+          loadingProgress.setVisibility(View.GONE);
+          Toast.makeText(getContext(), R.string.resource_no_works_found, Toast.LENGTH_SHORT).show();
+        });
+  }
+
+  private void showShareLinkLoadFailed(int generation, Platform platform) {
+    if (platform == null) {
+      showUnsupportedLink(generation);
+      return;
+    }
+    mainHandler.post(
+        () -> {
+          if (destroyed.get() || generation != loadGeneration || !isAdded() || getView() == null) {
+            return;
+          }
+          inFlightLoad = null;
+          loadingProgress.setVisibility(View.GONE);
+          boolean hasCookie = AppPrefs.hasConfiguredCookie(requireContext(), platform);
+          String platformName =
+              getString(
+                  platform == Platform.TIKTOK
+                      ? R.string.cookies_platform_tiktok
+                      : R.string.cookies_platform_douyin);
+          new MaterialAlertDialogBuilder(requireContext())
+              .setTitle(R.string.resource_load_failed_title)
+              .setMessage(
+                  getString(
+                      hasCookie
+                          ? R.string.resource_update_cookies_hint
+                          : R.string.resource_set_cookies_hint,
+                      platformName))
+              .setPositiveButton(
+                  R.string.resource_open_cookies,
+                  (dialog, which) ->
+                      startActivity(new Intent(requireContext(), CookiesActivity.class)))
+              .setNegativeButton(R.string.dialog_cancel, null)
               .show();
         });
   }
@@ -843,6 +920,7 @@ public class ResourceFragment extends Fragment
         -1L,
         CardType.VIDEO.getIconResId(),
         parentTitle,
+        profile.authorNickname(),
         CardType.VIDEO,
         profile.createTime() * 1000L,
         0,
@@ -867,6 +945,7 @@ public class ResourceFragment extends Fragment
               -1L,
               CardType.PHOTO.getIconResId(),
               getString(R.string.resource_video_cover_label, parentTitle),
+              profile.authorNickname(),
               CardType.PHOTO,
               profile.createTime() * 1000L,
               0,
@@ -921,6 +1000,7 @@ public class ResourceFragment extends Fragment
                 -1L,
                 CardType.PHOTO.getIconResId(),
                 getString(R.string.resource_video_cover_label, photoDesc),
+                profile.authorNickname(),
                 CardType.PHOTO,
                 profile.createTime() * 1000L,
                 0,
@@ -940,6 +1020,7 @@ public class ResourceFragment extends Fragment
                 -1L,
                 CardType.VIDEO.getIconResId(),
                 photoDesc,
+                profile.authorNickname(),
                 CardType.VIDEO,
                 profile.createTime() * 1000L,
                 0,
@@ -961,6 +1042,7 @@ public class ResourceFragment extends Fragment
               -1L,
               CardType.PHOTO.getIconResId(),
               photoDesc,
+              profile.authorNickname(),
               CardType.PHOTO,
               profile.createTime() * 1000L,
               0,
@@ -1007,6 +1089,7 @@ public class ResourceFragment extends Fragment
                 -1L,
                 CardType.PHOTO.getIconResId(),
                 getString(R.string.resource_video_cover_label, photoDesc),
+                parentItem.authorNickname(),
                 CardType.PHOTO,
                 parentItem.createTime(),
                 0,
@@ -1026,6 +1109,7 @@ public class ResourceFragment extends Fragment
                 -1L,
                 CardType.VIDEO.getIconResId(),
                 photoDesc,
+                parentItem.authorNickname(),
                 CardType.VIDEO,
                 parentItem.createTime(),
                 0,
@@ -1047,6 +1131,7 @@ public class ResourceFragment extends Fragment
               -1L,
               CardType.PHOTO.getIconResId(),
               photoDesc,
+              parentItem.authorNickname(),
               CardType.PHOTO,
               parentItem.createTime(),
               0,
@@ -1067,7 +1152,7 @@ public class ResourceFragment extends Fragment
 
   @Override
   public void onResourceSelectToggle(ResourceItem item, int position) {
-    if (isFromHome() || item == null) return;
+    if (isFromHome() || item == null || isQueued(item)) return;
     if (!selectedKeys.remove(item.key())) selectedKeys.add(item.key());
     if (adapter != null) adapter.notifyItemChanged(position);
     updateActionButtons();
@@ -1090,17 +1175,17 @@ public class ResourceFragment extends Fragment
 
   private void toggleSelectAll() {
     var selectableCount = getSelectableCount();
-    boolean shouldSelectAll = selectedKeys.size() < selectableCount;
+    boolean shouldSelectAll = getVisibleSelectedCount() < selectableCount;
 
     if (shouldSelectAll) {
       resourceList.forEach(
           item -> {
-            if (item != null && !isQueued(item) && !isDownloaded(item)) {
+            if (item != null && !isQueued(item)) {
               selectedKeys.add(item.key());
             }
           });
     } else {
-      selectedKeys.clear();
+      resourceList.forEach(item -> selectedKeys.remove(item.key()));
     }
     if (adapter != null) adapter.refreshSelectionState();
     updateActionButtons();
@@ -1108,30 +1193,43 @@ public class ResourceFragment extends Fragment
 
   private void downloadSelection() {
     if (isFromHome() || selectedKeys.isEmpty()) return;
-    int skippedCount = 0;
     List<ResourceItem> selectedItems = new ArrayList<>();
+    int downloadedCount = 0;
     for (ResourceItem item : resourceList) {
       if (item == null || !selectedKeys.contains(item.key())) {
         continue;
       }
-      if (isQueued(item) || isDownloaded(item)) {
-        skippedCount++;
+      if (isQueued(item)) {
         continue;
       }
+      if (isDownloaded(item) || completedQueueKeys.contains(item.key())) downloadedCount++;
       selectedItems.add(prepareItemForDownload(item));
     }
+    if (selectedItems.isEmpty()) return;
+    if (downloadedCount > 0) {
+      new MaterialAlertDialogBuilder(requireContext())
+          .setTitle(R.string.resource_download_again_title)
+          .setMessage(
+              getResources()
+                  .getQuantityString(
+                      R.plurals.resource_download_again_message,
+                      downloadedCount,
+                      downloadedCount))
+          .setPositiveButton(
+              R.string.resource_download_again_confirm,
+              (dialog, which) -> enqueueSelection(selectedItems))
+          .setNegativeButton(R.string.dialog_cancel, null)
+          .show();
+      return;
+    }
+    enqueueSelection(selectedItems);
+  }
+
+  private void enqueueSelection(List<ResourceItem> selectedItems) {
     int added = DownloadQueue.addAll(selectedItems);
     selectedKeys.clear();
     refreshQueueState(true);
-    if (skippedCount > 0) {
-      Toast.makeText(
-              getContext(),
-              getResources()
-                  .getQuantityString(
-                      R.plurals.resource_download_skipped, skippedCount, skippedCount),
-              Toast.LENGTH_SHORT)
-          .show();
-    } else if (added == 0) {
+    if (added == 0) {
       Toast.makeText(getContext(), R.string.resource_already_in_downloads, Toast.LENGTH_SHORT)
           .show();
     }
@@ -1152,6 +1250,7 @@ public class ResourceFragment extends Fragment
         item.parentId(),
         item.imageResId(),
         item.text(),
+        item.authorNickname(),
         item.type(),
         item.createTime(),
         item.childrenNum(),
@@ -1167,6 +1266,9 @@ public class ResourceFragment extends Fragment
 
   private String resolveDownloadStorageDir(ResourceItem item) {
     if (item == null) {
+      return "";
+    }
+    if (!AppPrefs.shouldUseDownloadSubdirectories(requireContext())) {
       return "";
     }
     if (item.storageDir() != null && !item.storageDir().isBlank()) {
@@ -1189,7 +1291,7 @@ public class ResourceFragment extends Fragment
   }
 
   private boolean shouldPersistResourceSnapshot() {
-    return resourceId <= 0 && resourceList != null && !resourceList.isEmpty();
+    return resourceId <= 0 && !allResourceList.isEmpty();
   }
 
   private String persistResourceSnapshot() {
@@ -1198,7 +1300,7 @@ public class ResourceFragment extends Fragment
     }
     snapshotToken =
         ResourceScreenSnapshot.persist(
-            getSnapshotDirectory(), snapshotToken == null ? screenKey : snapshotToken, resourceList);
+            getSnapshotDirectory(), snapshotToken == null ? screenKey : snapshotToken, allResourceList);
     if (snapshotToken == null || snapshotToken.isBlank()) {
       return "";
     }
@@ -1241,6 +1343,7 @@ public class ResourceFragment extends Fragment
     if (queuedChanged) {
       queuedKeys.clear();
       queuedKeys.addAll(nextQueuedKeys);
+      selectedKeys.removeAll(queuedKeys);
       if (adapter != null) {
         adapter.refreshSelectionState();
       }
@@ -1310,18 +1413,10 @@ public class ResourceFragment extends Fragment
     }
     if (actionBar != null) actionBar.setVisibility(View.VISIBLE);
     var selectableCount = getSelectableCount();
-    if (btnDownload != null) btnDownload.setEnabled(!selectedKeys.isEmpty());
+    long actuallySelected = getVisibleSelectedCount();
+    if (btnDownload != null) btnDownload.setEnabled(actuallySelected > 0);
     if (btnToggleSelectAll != null && btnToggleSelectAll instanceof android.widget.Button) {
       btnToggleSelectAll.setEnabled(selectableCount > 0);
-      long actuallySelected =
-          resourceList.stream()
-              .filter(
-                  item ->
-                      item != null
-                          && !isQueued(item)
-                          && !isDownloaded(item)
-                          && selectedKeys.contains(item.key()))
-              .count();
       ((android.widget.Button) btnToggleSelectAll)
           .setText(
               actuallySelected < selectableCount ? R.string.select_all : R.string.unselect_all);
@@ -1330,13 +1425,17 @@ public class ResourceFragment extends Fragment
 
   private long getSelectableCount() {
     return resourceList.stream()
-        .filter(item -> item != null && !isQueued(item) && !isDownloaded(item))
+        .filter(item -> item != null && !isQueued(item))
+        .count();
+  }
+
+  private long getVisibleSelectedCount() {
+    return resourceList.stream()
+        .filter(item -> item != null && !isQueued(item) && selectedKeys.contains(item.key()))
         .count();
   }
 
   private boolean isFromHome() {
-    // REFERRER_HOME means coming from Home page - should hide selection UI
-    // REFERRER_RESOURCE or null means coming from Load - should show selection UI
     return ResourceActivity.REFERRER_HOME.equals(referrer);
   }
 
@@ -1399,18 +1498,18 @@ public class ResourceFragment extends Fragment
     ProbeResult run(LinkKind kind);
   }
 
-  private record ProbeResult(List<AwemeProfile> profiles, CardType rootType) {
+  private record ProbeResult(List<AwemeProfile> profiles, CardType rootType, boolean failed) {
     private ProbeResult {
       profiles = profiles == null ? List.of() : List.copyOf(profiles);
       rootType = rootType == null ? CardType.ALBUM : rootType;
     }
 
-    static ProbeResult empty(CardType rootType) {
-      return new ProbeResult(List.of(), rootType);
+    static ProbeResult failed(CardType rootType) {
+      return new ProbeResult(List.of(), rootType, true);
     }
   }
 
-  private record AggregatedProfiles(List<AwemeProfile> profiles, CardType rootType) {
+  private record AggregatedProfiles(List<AwemeProfile> profiles, CardType rootType, boolean failed) {
     private AggregatedProfiles {
       profiles = profiles == null ? List.of() : List.copyOf(profiles);
       rootType = rootType == null ? CardType.ALBUM : rootType;

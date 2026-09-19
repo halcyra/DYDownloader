@@ -1,626 +1,582 @@
 package com.hhst.dydownloader.tiktok;
 
+import com.hhst.dydownloader.util.CustomBase64;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.TreeMap;
-import java.util.function.LongSupplier;
 
+/**
+ * TikTok Web 请求签名，移植自 DouK-Downloader (TikTokDownloader) 的 webmssdk
+ * (2.0.0.561) 逆向实现，与 src/encrypt/tiktok_sign.py 保持一致。
+ *
+ * <p>签名参数及其顺序由 SDK 决定：
+ * {@code <业务 query>&X-Dynosaur=..&msToken=..&X-Bogus=1&X-Gnarly=..}。
+ * X-Gnarly 封印的 query 包含 X-Dynosaur 与 msToken，签发后调序即失效。
+ */
 public final class TikTokRequestSigner {
-  private static final char[] STANDARD_BASE64_ALPHABET =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".toCharArray();
-  private final LongSupplier epochSecondsSupplier;
+  private static final long MASK32 = 0xFFFFFFFFL;
 
-  public TikTokRequestSigner() {
-    this(() -> System.currentTimeMillis() / 1000L);
+  // 签名参数，顺序由 SDK 决定
+  private static final String DYNOSAUR_PARAM = "X-Dynosaur";
+  private static final String MS_TOKEN_PARAM = "msToken";
+  private static final String BOGUS_PARAM = "X-Bogus";
+  private static final String GNARLY_PARAM = "X-Gnarly";
+
+  // HTTP 请求上 X-Bogus 为字面量 "1"；16 位 X-Bogus 只出现在 websocket 握手
+  private static final String BOGUS_VALUE = "1";
+
+  // 自定义 base64 字母表（相对标准表的位置置换），SDK 字符串表原文
+  private static final String ALPHABET = "u09tbS3UvgDEe6r-ZVMXzLpsAohTn7mdINQlW412GqBjfYiyk8JORCF5/xKHwacP";
+
+  // 信封首字节
+  private static final int ENVELOPE_TAG = 0x4B;
+
+  // ChaCha 状态字 0..3，非教科书 "expand 32-byte k"，来自 SDK 原文
+  private static final int[] CHACHA_INIT = {(int) 1196819126L, 600974999, (int) 3863347763L, 1451689750};
+
+  // FNV-1a 32 位变体：非标准偏移基数，每字节额外乘 33
+  private static final long FNV_OFFSET = 2166136260L;
+  private static final long FNV_PRIME = 16777619L;
+
+  // 载荷携带的 SDK 与 bundle 版本。
+  private static final String SDK_VERSION = "5.3.2";
+  private static final String SCM_VERSION = "2.0.0.561";
+
+  // 环境指纹；账号列表接口对这些值敏感。
+  private static final int ENV_CODE = 65;
+  private static final int UB_CODE = 8;
+
+  // X-Dynosaur 字段 0x38，跨 bundle 与环境扰动恒定，是 SDK 内部 md5 的 hash_state
+  private static final long VM_STATE_HASH = 0xC46CE353L;
+
+  // Canvas 指纹：-1 表示"无 canvas"，无 2d 上下文的页面即上报此值
+  private static final String CANVAS_HASH = "-1";
+
+  // Node 桩环境无法产生、按 "0" 钉住的三个环境字段
+  private static final String WEBGL_HASH = "0";
+  private static final String COMPONENT_VERSION = "0";
+  private static final String DEVICE_HASH = "0";
+
+  // SDK 认为自身所在页面的 location.host + location.pathname
+  private static final String PAGE = "www.tiktok.com/";
+
+  // SDK 从 1 开始计自己的签名次数并写入四个字段，新页面首次签名为 1
+  static final int CALL_SEQUENCE_START = 1;
+
+  // 两个字节数组编码器 (xor_base, add_base, pre_xor, rot, post_add)：
+  // A 编码除校验和外的所有字段；B 编码校验和与三个标志位
+  private static final int[] ENCODER_A = {103, 1, -1, 2, 1};
+  private static final int[] ENCODER_B = {102, 0, 165, 1, 0};
+
+  // 每个信封内嵌的密钥字数
+  private static final int KEY_WORDS = 12;
+
+  private TikTokRequestSigner() {}
+
+  /**
+   * 对业务参数计算完整签名，返回可直接拼接在接口地址后的完整 query 字符串。
+   *
+   * @param params 业务参数（不含签名参数；msToken 若包含在内会被摘出并移至
+   *     SDK 固定位置，不会出现第二份）
+   * @param userAgent 请求使用的 User-Agent，必须与实际发送的一致
+   * @param msToken 会话令牌，按原样封入（含空值），绝不伪造
+   */
+  public static String sign(Map<String, String> params, String userAgent, String msToken) {
+    return sign(
+        params, userAgent, msToken, System.currentTimeMillis() / 1000L, clockNonce(),
+        ~clockNonce() & MASK32, null, null, new Random());
   }
 
-  public TikTokRequestSigner(LongSupplier epochSecondsSupplier) {
-    this.epochSecondsSupplier =
-        epochSecondsSupplier != null
-            ? epochSecondsSupplier
-            : () -> System.currentTimeMillis() / 1000L;
-  }
-
-  static int nextUnsignedInt(Random random) {
-    if (random == null) {
-      return 0;
+  /** 全参数版本，供测试注入固定时钟、随机数与密钥。 */
+  public static String sign(
+      Map<String, String> params,
+      String userAgent,
+      String msToken,
+      long timestampSeconds,
+      long nonce,
+      long nonce2,
+      long[] key1,
+      long[] key2,
+      Random rng) {
+    List<String[]> pairs = new ArrayList<>();
+    if (params != null) {
+      for (Map.Entry<String, String> entry : params.entrySet()) {
+        pairs.add(new String[] {entry.getKey(), entry.getValue() == null ? "" : entry.getValue()});
+      }
     }
-    // Android API 24 lacks Random.nextLong(bound); nextInt() already gives a uniform 32-bit value.
-    return random.nextInt();
+    String query = encodeQuery(pairs);
+    long[] firstKey = key1 != null ? key1 : randomKey(rng);
+    long[] secondKey = key2 != null ? key2 : randomKey(rng);
+    return sign(
+        query, userAgent, msToken, timestampSeconds, nonce, nonce2,
+        firstKey, secondKey, CALL_SEQUENCE_START);
   }
 
-  static String encodeBase64(byte[] input) {
-    if (input == null || input.length == 0) {
-      return "";
+  /** 与上游 tiktok_sign.sign 一致：query 为最终发送的字节序（已按浏览器规则编码）。 */
+  static String sign(
+      String query,
+      String userAgent,
+      String msToken,
+      long timestampSeconds,
+      long firstNonce,
+      long secondNonce,
+      long[] key1,
+      long[] key2,
+      int sequence) {
+    // 从 query 字符串摘出 msToken（仅拆分，不解码，字节序不变）
+    List<String> parts = new ArrayList<>();
+    String embeddedToken = "";
+    for (String part : query.split("&")) {
+      if (part.isEmpty()) {
+        continue;
+      }
+      int separator = part.indexOf('=');
+      String name = separator >= 0 ? part.substring(0, separator) : part;
+      if (MS_TOKEN_PARAM.equals(name)) {
+        embeddedToken = separator >= 0 ? part.substring(separator + 1) : "";
+        continue;
+      }
+      parts.add(part);
     }
-    StringBuilder builder = new StringBuilder(((input.length + 2) / 3) * 4);
-    for (int index = 0; index < input.length; index += 3) {
-      int first = input[index] & 0xFF;
-      int second = index + 1 < input.length ? input[index + 1] & 0xFF : 0;
-      int third = index + 2 < input.length ? input[index + 2] & 0xFF : 0;
-      int chunk = (first << 16) | (second << 8) | third;
-      builder.append(STANDARD_BASE64_ALPHABET[(chunk >>> 18) & 0x3F]);
-      builder.append(STANDARD_BASE64_ALPHABET[(chunk >>> 12) & 0x3F]);
-      builder.append(
-          index + 1 < input.length ? STANDARD_BASE64_ALPHABET[(chunk >>> 6) & 0x3F] : '=');
-      builder.append(index + 2 < input.length ? STANDARD_BASE64_ALPHABET[chunk & 0x3F] : '=');
-    }
-    return builder.toString();
+    // query 自带的 msToken 是权威值；否则使用调用方传入的 token
+    String token = embeddedToken.isEmpty() ? (msToken == null ? "" : msToken) : embeddedToken;
+    String businessQuery = String.join("&", parts);
+
+    String dynosaur =
+        seal(
+            dynosaurPayload(
+                businessQuery, userAgent, timestampSeconds, firstNonce, sequence),
+            key1);
+    // 封印覆盖追加了 X-Dynosaur 与 msToken 之后的 query，因此二者必须
+    // 在 X-Gnarly 计算前拼接；夹在中间的 X-Bogus 不在封印范围内
+    String sealedQuery =
+        businessQuery + "&" + DYNOSAUR_PARAM + "=" + dynosaur + "&" + MS_TOKEN_PARAM + "=" + token;
+    String gnarly =
+        seal(
+            gnarlyPayload(
+                sealedQuery, userAgent, new byte[0], timestampSeconds, firstNonce, secondNonce,
+                sequence),
+            key2);
+    // 原样拼接而非百分号编码：字母表含 "/"，填充为 "="，TikTok 页面对二者同样不做转义
+    return sealedQuery + "&" + BOGUS_PARAM + "=" + BOGUS_VALUE + "&" + GNARLY_PARAM + "=" + gnarly;
   }
 
-  private static String encodeQuery(Map<String, String> params) {
+  // ------------------------------------------------------------------
+  // TikTok 浏览器序列化规则
+  // ------------------------------------------------------------------
+
+  /** TikTok 的浏览器序列化不是 application/x-www-form-urlencoded：空格为 %20，括号、斜杠、冒号保持原样。 */
+  private static String encodeQuery(List<String[]> pairs) {
     StringBuilder builder = new StringBuilder();
-    for (Map.Entry<String, String> entry : params.entrySet()) {
+    for (String[] pair : pairs) {
       if (builder.length() > 0) {
         builder.append('&');
       }
-      builder.append(urlEncode(entry.getKey()));
-      builder.append('=');
-      builder.append(urlEncode(entry.getValue()));
+      builder.append(escape(pair[0])).append('=').append(escape(pair[1]));
     }
     return builder.toString();
   }
 
-  private static String urlEncode(String value) {
-    if (value == null) {
-      return "";
-    }
-    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-    StringBuilder builder = new StringBuilder(bytes.length * 2);
-    for (byte current : bytes) {
-      int unsigned = current & 0xFF;
-      if ((unsigned >= 'a' && unsigned <= 'z')
-          || (unsigned >= 'A' && unsigned <= 'Z')
-          || (unsigned >= '0' && unsigned <= '9')
-          || unsigned == '-'
-          || unsigned == '_'
-          || unsigned == '.'
-          || unsigned == '~') {
-        builder.append((char) unsigned);
+  private static String escape(String text) {
+    StringBuilder builder = new StringBuilder(text.length());
+    for (int i = 0; i < text.length(); i++) {
+      char current = text.charAt(i);
+      if (current == ' ') {
+        builder.append("%20");
+      } else if (current == '"') {
+        builder.append("%22");
+      } else if (current == '<') {
+        builder.append("%3C");
+      } else if (current == '>') {
+        builder.append("%3E");
+      } else if (current == '`') {
+        builder.append("%60");
+      } else if (current == '#') {
+        builder.append("%23");
+      } else if (current > ' ' && current <= '~') {
+        builder.append(current);
       } else {
-        builder.append('%');
-        builder.append(Character.toUpperCase(Character.forDigit((unsigned >> 4) & 0xF, 16)));
-        builder.append(Character.toUpperCase(Character.forDigit(unsigned & 0xF, 16)));
+        // 代理对按整体取 UTF-8 字节，避免低位代理被单独编码
+        String unit = String.valueOf(current);
+        if (Character.isHighSurrogate(current)
+            && i + 1 < text.length()
+            && Character.isLowSurrogate(text.charAt(i + 1))) {
+          unit = text.substring(i, i + 2);
+          i++;
+        }
+        for (byte value : utf8(unit)) {
+          appendPercentByte(builder, value & 0xFF);
+        }
       }
     }
     return builder.toString();
   }
 
-  private static byte[] md5(byte[] input) {
-    try {
-      return MessageDigest.getInstance("MD5").digest(input);
-    } catch (Exception e) {
-      throw new IllegalStateException("MD5 unavailable", e);
+  private static void appendPercentByte(StringBuilder builder, int value) {
+    builder.append('%');
+    builder.append(Character.toUpperCase(Character.forDigit((value >> 4) & 0xF, 16)));
+    builder.append(Character.toUpperCase(Character.forDigit(value & 0xF, 16)));
+  }
+
+  // ------------------------------------------------------------------
+  // 载荷构造
+  // ------------------------------------------------------------------
+
+  /** SDK 的 FNV-1a 变体：常规轮之后乘 33。 */
+  static long hashState(String text) {
+    long value = FNV_OFFSET;
+    for (byte current : utf8(text)) {
+      long step = ((value ^ (current & 0xFF)) * FNV_PRIME) & MASK32;
+      value = (step + ((step * 32) & MASK32)) & MASK32;
     }
+    return value;
+  }
+
+  /** 单个载荷字段：按位置的字节扰乱，填充后带长度标签。 */
+  private static byte[] encodeField(String text, int[] config) {
+    int xorBase = config[0];
+    int addBase = config[1];
+    int preXor = config[2];
+    int rotate = config[3];
+    int postAdd = config[4];
+    int size = Math.max(text.length() + 2, 6);
+    byte[] out = new byte[size];
+    for (int index = 0; index < text.length(); index++) {
+      long value = ((long) text.charAt(index) ^ (xorBase + index)) & MASK32;
+      value = (value + addBase + (170 & index)) % 256;
+      if (preXor >= 0) {
+        value ^= preXor;
+      }
+      value = ((value << rotate) | (value >> (8 - rotate))) & 0xFF;
+      out[index] = (byte) ((value ^ 187) + postAdd);
+    }
+    for (int index = text.length(); index < size - 2; index++) {
+      out[index] = (byte) (221 + index);
+    }
+    out[size - 2] = 0;
+    out[size - 1] = (byte) text.length();
+    return out;
+  }
+
+  /** 字段铺成平台解析的 TLV 条目（key、0x00、length、value...）。 */
+  private static byte[] packPayload(Map<Integer, byte[]> fields, boolean leadCount) {
+    List<Integer> keys = new ArrayList<>(fields.keySet());
+    keys.sort(Integer::compareTo);
+    int total = leadCount ? 1 : 0;
+    for (Integer key : keys) {
+      total += 3 + fields.get(key).length;
+    }
+    byte[] out = new byte[total];
+    int offset = 0;
+    if (leadCount) {
+      out[offset++] = (byte) keys.size();
+    }
+    for (Integer key : keys) {
+      byte[] value = fields.get(key);
+      out[offset++] = key.byteValue();
+      out[offset++] = 0;
+      out[offset++] = (byte) value.length;
+      System.arraycopy(value, 0, out, offset, value.length);
+      offset += value.length;
+    }
+    return out;
+  }
+
+  private static byte[] be(long value, int size) {
+    ByteBuffer buffer = ByteBuffer.allocate(size);
+    for (int i = size - 1; i >= 0; i--) {
+      buffer.put(i, (byte) ((value >> (8 * (size - 1 - i))) & 0xFF));
+    }
+    return buffer.array();
+  }
+
+  /** 把两个 32 位值折叠进 16 位，并在高位盖上环境标记。 */
+  private static long mixState(long timestamp, long nonce, int envCode) {
+    long folded = ((timestamp >> 16) ^ (nonce >> 16) ^ timestamp ^ nonce) & 0xFFFF;
+    return folded | ((long) envCode << 16);
+  }
+
+  /** X-Gnarly 字段值的 XOR 折叠，种子为全 1。 */
+  private static long foldChecksum(List<Object> values, int mode) {
+    long accumulator = MASK32;
+    for (Object value : values) {
+      long number;
+      if (value instanceof String) {
+        byte[] bytes = utf8((String) value);
+        number = 0;
+        if (mode != 1) {
+          int limit = Math.min(4, bytes.length);
+          for (int i = 0; i < limit; i++) {
+            number = (number << 8) | (bytes[i] & 0xFF);
+          }
+        }
+      } else {
+        number = (Long) value;
+      }
+      accumulator ^= number & MASK32;
+    }
+    return accumulator & MASK32;
+  }
+
+  // ------------------------------------------------------------------
+  // ChaCha 变体
+  // ------------------------------------------------------------------
+
+  private static void quarterRound(int[] state, int a, int b, int c, int d) {
+    state[a] += state[b];
+    state[d] = Integer.rotateLeft(state[d] ^ state[a], 16);
+    state[c] += state[d];
+    state[b] = Integer.rotateLeft(state[b] ^ state[c], 12);
+    state[a] += state[b];
+    state[d] = Integer.rotateLeft(state[d] ^ state[a], 8);
+    state[c] += state[d];
+    state[b] = Integer.rotateLeft(state[b] ^ state[c], 7);
+  }
+
+  /**
+   * 一个 64 字节块。这不是 ChaCha20，差异是关键。
+   *
+   * <p>rounds 计单轮次数且随数据变化（5..20），奇数轮在列轮后退出；
+   * 对角轮第三四元组是 (2, 7, 12, 13)（12 出现两次），系原实现缺陷，刻意复现。
+   */
+  private static int[] keystream(int[] state, int rounds) {
+    int[] working = state.clone();
+    int done = 0;
+    while (done < rounds) {
+      quarterRound(working, 0, 4, 8, 12);
+      quarterRound(working, 1, 5, 9, 13);
+      quarterRound(working, 2, 6, 10, 14);
+      quarterRound(working, 3, 7, 11, 15);
+      done++;
+      if (done >= rounds) {
+        break;
+      }
+      quarterRound(working, 0, 5, 10, 15);
+      quarterRound(working, 1, 6, 11, 12);
+      quarterRound(working, 2, 7, 12, 13);
+      quarterRound(working, 3, 4, 13, 14);
+      done++;
+    }
+    int[] out = new int[16];
+    for (int i = 0; i < 16; i++) {
+      out[i] = working[i] + state[i];
+    }
+    return out;
+  }
+
+  /** 把载荷按小端 uint32 字读入，与密钥流异或。 */
+  private static byte[] crypt(int[] key, int rounds, byte[] payload) {
+    int[] state = new int[16];
+    System.arraycopy(CHACHA_INIT, 0, state, 0, 4);
+    System.arraycopy(key, 0, state, 4, 12);
+    int wordCount = (payload.length + 3) / 4;
+    int[] words = new int[wordCount];
+    for (int i = 0; i < wordCount; i++) {
+      int value = 0;
+      for (int j = 0; j < 4; j++) {
+        int index = 4 * i + j;
+        if (index < payload.length) {
+          value |= (payload[index] & 0xFF) << (8 * j);
+        }
+      }
+      words[i] = value;
+    }
+    int offset = 0;
+    while (offset + 16 < wordCount) {
+      int[] block = keystream(state, rounds);
+      state[12] = state[12] + 1;
+      for (int i = 0; i < 16; i++) {
+        words[offset + i] ^= block[i];
+      }
+      offset += 16;
+    }
+    int[] tailBlock = keystream(state, rounds);
+    for (int i = 0; i < wordCount - offset; i++) {
+      words[offset + i] ^= tailBlock[i];
+    }
+    byte[] out = new byte[payload.length];
+    for (int i = 0; i < wordCount; i++) {
+      for (int j = 0; j < 4 && 4 * i + j < payload.length; j++) {
+        out[4 * i + j] = (byte) ((words[i] >> (8 * j)) & 0xFF);
+      }
+    }
+    return out;
+  }
+
+  /** 加密、把密钥拼回密文、编码。拼接位置由字节和决定，服务端据此回收密钥。 */
+  static String seal(byte[] payload, long[] keyWords) {
+    int[] key = new int[keyWords.length];
+    int keyLowSum = 0;
+    for (int i = 0; i < keyWords.length; i++) {
+      key[i] = (int) keyWords[i];
+      keyLowSum += key[i] & 0xF;
+    }
+    int rounds = (keyLowSum & 0xF) + 5;
+    byte[] ciphertext = crypt(key, rounds, payload);
+    byte[] keyBytes = new byte[keyWords.length * 4];
+    long keySum = 0;
+    for (int i = 0; i < keyWords.length; i++) {
+      byte[] wordBytes = be(keyWords[i] & MASK32, 4);
+      // 小端字节序
+      keyBytes[4 * i] = wordBytes[3];
+      keyBytes[4 * i + 1] = wordBytes[2];
+      keyBytes[4 * i + 2] = wordBytes[1];
+      keyBytes[4 * i + 3] = wordBytes[0];
+      for (byte value : wordBytes) {
+        keySum += value & 0xFF;
+      }
+    }
+    long cipherSum = 0;
+    for (byte value : ciphertext) {
+      cipherSum += value & 0xFF;
+    }
+    int position = (int) ((keySum + cipherSum) % (ciphertext.length + 1));
+    byte[] raw = new byte[1 + keyBytes.length + ciphertext.length];
+    raw[0] = (byte) ENVELOPE_TAG;
+    int offset = 1;
+    System.arraycopy(ciphertext, 0, raw, offset, position);
+    offset += position;
+    System.arraycopy(keyBytes, 0, raw, offset, keyBytes.length);
+    offset += keyBytes.length;
+    System.arraycopy(ciphertext, position, raw, offset, ciphertext.length - position);
+    return CustomBase64.encode(raw, ALPHABET);
+  }
+
+  private static long[] randomKey(Random rng) {
+    long[] key = new long[KEY_WORDS];
+    for (int i = 0; i < KEY_WORDS; i++) {
+      key[i] = rng.nextInt() & MASK32;
+    }
+    return key;
+  }
+
+  /** 取自微秒时钟的 32 位值，与 SDK 的取法一致。 */
+  private static long clockNonce() {
+    return (System.currentTimeMillis() * 1000L) & MASK32;
+  }
+
+  // ------------------------------------------------------------------
+  // 载荷
+  // ------------------------------------------------------------------
+
+  /**
+   * 环境报告：25 个 TLV 字段，键 0x20..0x38 升序。
+   *
+   * <p>只有三个字段把报告与请求绑定（均为 hashState）：0x2B 对空字符串
+   * （GET 无 body）、0x2E 对 query（仅 query，不含路径）、0x30 对 User-Agent。
+   */
+  private static byte[] dynosaurPayload(String query, String userAgent, long timestamp, long nonce, int sequence) {
+    Map<Integer, byte[]> fields = new LinkedHashMap<>();
+    long mixed = mixState(timestamp, nonce, ENV_CODE);
+    fields.put(0x21, encodeField("1", ENCODER_B));
+    fields.put(0x22, encodeField("1", ENCODER_B));
+    fields.put(0x23, encodeField("0", ENCODER_A));
+    fields.put(0x24, encodeField(String.valueOf(mixed), ENCODER_A));
+    fields.put(0x25, encodeField(String.valueOf(sequence), ENCODER_A));
+    fields.put(0x26, encodeField(String.valueOf(ENV_CODE), ENCODER_A));
+    fields.put(0x27, encodeField(String.valueOf(timestamp), ENCODER_A));
+    fields.put(0x28, encodeField(WEBGL_HASH, ENCODER_A));
+    fields.put(0x29, encodeField("0", ENCODER_A));
+    fields.put(0x2A, encodeField(SDK_VERSION, ENCODER_A));
+    fields.put(0x2B, be(hashState(""), 4));
+    fields.put(0x2C, encodeField(CANVAS_HASH, ENCODER_A));
+    fields.put(0x2D, encodeField("0", ENCODER_A));
+    fields.put(0x2E, be(hashState(query), 4));
+    fields.put(0x2F, encodeField(String.valueOf(sequence), ENCODER_A));
+    fields.put(0x30, be(hashState(userAgent), 4));
+    fields.put(0x31, encodeField(SCM_VERSION, ENCODER_A));
+    fields.put(0x32, encodeField(COMPONENT_VERSION, ENCODER_A));
+    fields.put(0x33, encodeField(DEVICE_HASH, ENCODER_A));
+    fields.put(0x34, encodeField(String.valueOf(nonce), ENCODER_A));
+    fields.put(0x35, encodeField(PAGE, ENCODER_A));
+    fields.put(0x36, encodeField(String.valueOf(UB_CODE), ENCODER_A));
+    fields.put(0x37, encodeField("0", ENCODER_A));
+    fields.put(0x38, be(VM_STATE_HASH, 4));
+    // 占位：下方校验和会覆盖全部字段重新写入 0x20
+    fields.put(0x20, encodeField("0", ENCODER_A));
+    long checksum = 0;
+    for (Map.Entry<Integer, byte[]> entry : fields.entrySet()) {
+      checksum ^= entry.getValue()[1] & 0xFF;
+    }
+    fields.put(0x20, encodeField(String.valueOf(checksum), ENCODER_B));
+    return packPayload(fields, false);
+  }
+
+  /** 请求封条的字段表，16 项（无 0x07）。 */
+  private static byte[] gnarlyPayload(
+      String signedQuery,
+      String userAgent,
+      byte[] body,
+      long timestamp,
+      long nonce,
+      long nonce2,
+      int sequence) {
+    String queryMd5 = md5Hex(utf8(signedQuery));
+    String bodyMd5 = md5Hex(body);
+    String agentMd5 = md5Hex(utf8(userAgent));
+    long mixed = mixState(timestamp, nonce, ENV_CODE);
+    List<Object> covered = new ArrayList<>();
+    covered.add(0L);
+    covered.add((long) ENV_CODE);
+    covered.add((long) UB_CODE);
+    covered.add(queryMd5);
+    covered.add(bodyMd5);
+    covered.add(agentMd5);
+    covered.add(timestamp & MASK32);
+    covered.add(0L);
+    covered.add(nonce & MASK32);
+    covered.add(SDK_VERSION);
+    covered.add(SCM_VERSION);
+    covered.add((long) CALL_SEQUENCE_START);
+    covered.add((long) sequence);
+    covered.add((long) sequence);
+    covered.add(mixed);
+    covered.add(nonce2 & MASK32);
+    long first = foldChecksum(covered, 2);
+    List<Object> coveredWithFirst = new ArrayList<>(covered);
+    coveredWithFirst.add(first);
+    long second = foldChecksum(coveredWithFirst, 1);
+
+    Map<Integer, byte[]> fields = new LinkedHashMap<>();
+    fields.put(0x00, be(second, 4));
+    fields.put(0x01, be(ENV_CODE, 2));
+    fields.put(0x02, be(UB_CODE, 2));
+    fields.put(0x03, utf8(queryMd5));
+    fields.put(0x04, utf8(bodyMd5));
+    fields.put(0x05, utf8(agentMd5));
+    fields.put(0x06, be(timestamp & MASK32, 4));
+    fields.put(0x08, be(nonce & MASK32, 4));
+    fields.put(0x09, utf8(SDK_VERSION));
+    fields.put(0x0A, utf8(SCM_VERSION));
+    fields.put(0x0B, be(CALL_SEQUENCE_START, 2));
+    fields.put(0x0C, be(sequence, 2));
+    fields.put(0x0D, be(sequence, 2));
+    fields.put(0x0E, be(mixed, 4));
+    fields.put(0x0F, be(nonce2 & MASK32, 4));
+    fields.put(0x10, be(first, 4));
+    return packPayload(fields, true);
+  }
+
+  private static byte[] utf8(String text) {
+    return text.getBytes(StandardCharsets.UTF_8);
   }
 
   private static String md5Hex(byte[] input) {
-    byte[] digest = md5(input);
-    StringBuilder builder = new StringBuilder(digest.length * 2);
-    for (byte value : digest) {
-      builder.append(Character.forDigit((value >> 4) & 0xF, 16));
-      builder.append(Character.forDigit(value & 0xF, 16));
-    }
-    return builder.toString();
-  }
-
-  public String sign(
-      Map<String, String> params, String userAgent, String deviceId, String msToken) {
-    long epochSeconds = Math.max(0L, epochSecondsSupplier.getAsLong());
-    String safeUserAgent = userAgent == null || userAgent.isBlank() ? "Mozilla/5.0" : userAgent;
-
-    Map<String, String> merged = new LinkedHashMap<>();
-    if (params != null && !params.isEmpty()) {
-      merged.putAll(new TreeMap<>(params));
-    }
-    if (deviceId != null && !deviceId.isBlank()) {
-      merged.put("device_id", deviceId);
-    }
-    if (msToken != null && !msToken.isBlank()) {
-      merged.put("msToken", msToken);
-    }
-
-    String query = encodeQuery(merged);
-    String xBogus = new XBogus().getXBogus(query, 8, safeUserAgent, epochSeconds);
-    String xGnarly =
-        new XGnarly(epochSeconds * 1000L).generate(query, "", safeUserAgent, 0, "5.1.1");
-    return query + "&X-Bogus=" + xBogus + "&X-Gnarly=" + xGnarly;
-  }
-
-  private static final class XBogus {
-    private static final String ALPHABET =
-        "Dkdpgh4ZKsQB80/Mfvw36XI1R25-WUAlEi7NLboqYTOPuzmFjJnryx9HVGcaStCe=";
-    private static final int CANVAS = (int) 3873194319L;
-    private static final int[] HEX_MAP = buildHexMap();
-
-    private static int[] buildHexMap() {
-      int[] array = new int[128];
-      Arrays.fill(array, -1);
-      for (char ch = '0'; ch <= '9'; ch++) {
-        array[ch] = ch - '0';
-      }
-      for (char ch = 'a'; ch <= 'f'; ch++) {
-        array[ch] = 10 + (ch - 'a');
-      }
-      return array;
-    }
-
-    private static int[] processUrlPath(String query) {
-      String first = md5Hex(query.getBytes(StandardCharsets.UTF_8));
-      byte[] firstBytes = hexToBytes(first);
-      String second = md5Hex(firstBytes);
-      return hexToUnsignedBytes(second);
-    }
-
-    private static byte[] hexToBytes(String hex) {
-      byte[] bytes = new byte[hex.length() / 2];
-      for (int index = 0; index < hex.length(); index += 2) {
-        bytes[index / 2] =
-            (byte) ((HEX_MAP[hex.charAt(index)] << 4) | HEX_MAP[hex.charAt(index + 1)]);
-      }
-      return bytes;
-    }
-
-    private static int[] hexToUnsignedBytes(String hex) {
-      int[] bytes = new int[hex.length() / 2];
-      for (int index = 0; index < hex.length(); index += 2) {
-        bytes[index / 2] =
-            ((HEX_MAP[hex.charAt(index)] << 4) | HEX_MAP[hex.charAt(index + 1)]) & 0xFF;
-      }
-      return bytes;
-    }
-
-    private static int[] disturbArray(int[] input) {
-      return new int[] {
-        input[0], input[2], input[4], input[6], input[8], input[10], input[12], input[14],
-        input[16], input[18], input[1], input[3], input[5], input[7], input[9], input[11],
-        input[13], input[15], input[17]
-      };
-    }
-
-    private static String generateGarbledOne(int[] values) {
-      int[] array = new int[19];
-      array[0] = values[0];
-      array[1] = values[5];
-      array[2] = values[1];
-      array[3] = values[6];
-      array[4] = values[2];
-      array[5] = values[7];
-      array[6] = values[3];
-      array[7] = values[8];
-      array[8] = values[4];
-      array[9] = values[9];
-      array[10] = values[10];
-      array[11] = values[15];
-      array[12] = values[11];
-      array[13] = values[16];
-      array[14] = values[12];
-      array[15] = values[17];
-      array[16] = values[13];
-      array[17] = values[18];
-      array[18] = values[14];
-      StringBuilder builder = new StringBuilder(array.length);
-      for (int value : array) {
-        builder.append((char) value);
+    try {
+      byte[] digest = MessageDigest.getInstance("MD5").digest(input);
+      StringBuilder builder = new StringBuilder(digest.length * 2);
+      for (byte value : digest) {
+        builder.append(Character.forDigit((value >> 4) & 0xF, 16));
+        builder.append(Character.forDigit(value & 0xF, 16));
       }
       return builder.toString();
-    }
-
-    private static String rc4(String key, String value) {
-      int[] box = new int[256];
-      for (int index = 0; index < 256; index++) {
-        box[index] = index;
-      }
-      int j = 0;
-      for (int index = 0; index < 256; index++) {
-        j = (j + box[index] + key.charAt(index % key.length())) % 256;
-        int temp = box[index];
-        box[index] = box[j];
-        box[j] = temp;
-      }
-      int i = 0;
-      j = 0;
-      StringBuilder builder = new StringBuilder(value.length());
-      for (int index = 0; index < value.length(); index++) {
-        i = (i + 1) % 256;
-        j = (j + box[i]) % 256;
-        int temp = box[i];
-        box[i] = box[j];
-        box[j] = temp;
-        builder.append((char) (value.charAt(index) ^ box[(box[i] + box[j]) % 256]));
-      }
-      return builder.toString();
-    }
-
-    private static int[] generateNumbers(String text) {
-      int[] numbers = new int[7];
-      for (int index = 0; index < 21; index += 3) {
-        numbers[index / 3] =
-            (text.charAt(index) << 16) | (text.charAt(index + 1) << 8) | text.charAt(index + 2);
-      }
-      return numbers;
-    }
-
-    private static String generateChunk(int value) {
-      char[] chars = new char[4];
-      chars[0] = ALPHABET.charAt((value >> 18) & 63);
-      chars[1] = ALPHABET.charAt((value >> 12) & 63);
-      chars[2] = ALPHABET.charAt((value >> 6) & 63);
-      chars[3] = ALPHABET.charAt(value & 63);
-      return new String(chars);
-    }
-
-    private static int[] generateUaArray(String userAgent, int params) {
-      byte[] key = new byte[] {0, 1, (byte) params};
-      byte[] transformed = rc4Bytes(key, userAgent.getBytes(StandardCharsets.UTF_8));
-      byte[] base64 = encodeBase64(transformed).getBytes(StandardCharsets.US_ASCII);
-      byte[] digest = md5(base64);
-      int[] result = new int[digest.length];
-      for (int i = 0; i < digest.length; i++) {
-        result[i] = digest[i] & 0xFF;
-      }
-      return result;
-    }
-
-    private static byte[] rc4Bytes(byte[] key, byte[] value) {
-      int[] box = new int[256];
-      for (int index = 0; index < 256; index++) {
-        box[index] = index;
-      }
-      int j = 0;
-      for (int index = 0; index < 256; index++) {
-        j = (j + box[index] + (key[index % key.length] & 0xFF)) % 256;
-        int temp = box[index];
-        box[index] = box[j];
-        box[j] = temp;
-      }
-      int i = 0;
-      j = 0;
-      byte[] output = new byte[value.length];
-      for (int index = 0; index < value.length; index++) {
-        i = (i + 1) % 256;
-        j = (j + box[i]) % 256;
-        int temp = box[i];
-        box[i] = box[j];
-        box[j] = temp;
-        output[index] = (byte) (value[index] ^ box[(box[i] + box[j]) % 256]);
-      }
-      return output;
-    }
-
-    String getXBogus(String query, int params, String userAgent, long epochSeconds) {
-      int timestamp = (int) epochSeconds;
-      int[] queryDigest = processUrlPath(query);
-      int[] uaArray = generateUaArray(userAgent, params);
-      int[] array = {
-        64,
-        0,
-        1,
-        params,
-        queryDigest[queryDigest.length - 2],
-        queryDigest[queryDigest.length - 1],
-        69,
-        63,
-        uaArray[uaArray.length - 2],
-        uaArray[uaArray.length - 1],
-        (timestamp >>> 24) & 0xFF,
-        (timestamp >>> 16) & 0xFF,
-        (timestamp >>> 8) & 0xFF,
-        timestamp & 0xFF,
-        (CANVAS >>> 24) & 0xFF,
-        (CANVAS >>> 16) & 0xFF,
-        (CANVAS >>> 8) & 0xFF,
-        CANVAS & 0xFF,
-        0
-      };
-      int checksum = 0;
-      for (int i = 0; i < array.length - 1; i++) {
-        checksum ^= array[i];
-      }
-      array[array.length - 1] = checksum & 0xFF;
-      int[] disturbed = disturbArray(array);
-      String garbled = generateGarbledOne(disturbed);
-      String encrypted = rc4("\u00FF", garbled);
-      String payload = new String(new char[] {2, (char) 255}) + encrypted;
-      StringBuilder result = new StringBuilder();
-      int[] numbers = generateNumbers(payload);
-      for (int number : numbers) {
-        result.append(generateChunk(number));
-      }
-      return result.toString();
-    }
-  }
-
-  private static final class XGnarly {
-    private static final long MASK32 = 0xFFFFFFFFL;
-    private static final int[] OT = {(int) 1196819126L, (int) 600974999L, (int) 2903579748L, 45};
-    private static final String BASE64_ALPHABET =
-        "u09tbS3UvgDEe6r-ZVMXzLpsAohTn7mdINQlW412GqBjfYiyk8JORCF5/xKHwacP=";
-
-    private final int[] state;
-    private final Random random;
-    private final long timestampMillis;
-    private int position;
-
-    XGnarly(long timestampMillis) {
-      this.timestampMillis = Math.max(0L, timestampMillis);
-      this.random = new Random(this.timestampMillis);
-      this.position = 0;
-      this.state =
-          new int[] {
-            (int) 2517678443L,
-            53,
-            (int) 3212677781L,
-            (int) 2633865432L,
-            (int) 217618912L,
-            (int) 2931180889L,
-            (int) 1498001188L,
-            (int) 2157053261L,
-            (int) 211147047L,
-            32,
-            (int) 2903579748L,
-            (int) 3732962506L,
-            (int) this.timestampMillis,
-            nextRandomInt(),
-            nextRandomInt(),
-            nextRandomInt()
-          };
-    }
-
-    private static int[] chachaBlock(int[] source, int rounds) {
-      int[] work = source.clone();
-      int round = 0;
-      while (round < rounds) {
-        quarter(work, 0, 4, 8, 12);
-        quarter(work, 1, 5, 9, 13);
-        quarter(work, 2, 6, 10, 14);
-        quarter(work, 3, 7, 11, 15);
-        round++;
-        if (round >= rounds) {
-          break;
-        }
-        quarter(work, 0, 5, 10, 15);
-        quarter(work, 1, 6, 11, 12);
-        quarter(work, 2, 7, 12, 13);
-        quarter(work, 3, 4, 13, 14);
-        round++;
-      }
-      for (int i = 0; i < work.length; i++) {
-        work[i] =
-            (int) ((Integer.toUnsignedLong(work[i]) + Integer.toUnsignedLong(source[i])) & MASK32);
-      }
-      return work;
-    }
-
-    private static void quarter(int[] state, int a, int b, int c, int d) {
-      state[a] =
-          (int) ((Integer.toUnsignedLong(state[a]) + Integer.toUnsignedLong(state[b])) & MASK32);
-      state[d] = Integer.rotateLeft(state[d] ^ state[a], 16);
-      state[c] =
-          (int) ((Integer.toUnsignedLong(state[c]) + Integer.toUnsignedLong(state[d])) & MASK32);
-      state[b] = Integer.rotateLeft(state[b] ^ state[c], 12);
-      state[a] =
-          (int) ((Integer.toUnsignedLong(state[a]) + Integer.toUnsignedLong(state[b])) & MASK32);
-      state[d] = Integer.rotateLeft(state[d] ^ state[a], 8);
-      state[c] =
-          (int) ((Integer.toUnsignedLong(state[c]) + Integer.toUnsignedLong(state[d])) & MASK32);
-      state[b] = Integer.rotateLeft(state[b] ^ state[c], 7);
-    }
-
-    private static int beIntFromString(String value) {
-      byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-      int limit = Math.min(bytes.length, 4);
-      int result = 0;
-      for (int index = 0; index < limit; index++) {
-        result = (result << 8) | (bytes[index] & 0xFF);
-      }
-      return result;
-    }
-
-    private static byte[] toNumberBytes(int value) {
-      if (value < 65535) {
-        return new byte[] {(byte) ((value >>> 8) & 0xFF), (byte) (value & 0xFF)};
-      }
-      return ByteBuffer.allocate(4).putInt(value).array();
-    }
-
-    private static void addAll(List<Integer> target, byte[] source) {
-      for (byte value : source) {
-        target.add(value & 0xFF);
-      }
-    }
-
-    private static String toAsciiString(List<Integer> bytes) {
-      StringBuilder builder = new StringBuilder(bytes.size());
-      for (int value : bytes) {
-        builder.append((char) value);
-      }
-      return builder.toString();
-    }
-
-    private static String encryptPayload(int[] keyWords, int rounds, String input) {
-      int[] fullState = new int[16];
-      System.arraycopy(OT, 0, fullState, 0, OT.length);
-      System.arraycopy(keyWords, 0, fullState, OT.length, keyWords.length);
-      byte[] data = input.getBytes(StandardCharsets.ISO_8859_1);
-      encryptChaCha(fullState, rounds, data);
-      return new String(data, StandardCharsets.ISO_8859_1);
-    }
-
-    private static void encryptChaCha(int[] keyWords, int rounds, byte[] data) {
-      int wordCount = (data.length + 3) / 4;
-      int[] words = new int[wordCount];
-      int fullWords = data.length / 4;
-      for (int i = 0; i < fullWords; i++) {
-        int offset = i * 4;
-        words[i] =
-            (data[offset] & 0xFF)
-                | ((data[offset + 1] & 0xFF) << 8)
-                | ((data[offset + 2] & 0xFF) << 16)
-                | ((data[offset + 3] & 0xFF) << 24);
-      }
-      int leftover = data.length % 4;
-      if (leftover > 0) {
-        int offset = fullWords * 4;
-        int value = 0;
-        for (int i = 0; i < leftover; i++) {
-          value |= (data[offset + i] & 0xFF) << (8 * i);
-        }
-        words[fullWords] = value;
-      }
-
-      int position = 0;
-      int[] state = keyWords.clone();
-      while (position + 16 < words.length) {
-        int[] stream = chachaBlock(state, rounds);
-        state[12] = (int) ((Integer.toUnsignedLong(state[12]) + 1) & MASK32);
-        for (int i = 0; i < 16; i++) {
-          words[position + i] ^= stream[i];
-        }
-        position += 16;
-      }
-      if (position < words.length) {
-        int[] stream = chachaBlock(state, rounds);
-        for (int i = 0; i < words.length - position; i++) {
-          words[position + i] ^= stream[i];
-        }
-      }
-
-      for (int i = 0; i < fullWords; i++) {
-        int word = words[i];
-        int offset = i * 4;
-        data[offset] = (byte) (word & 0xFF);
-        data[offset + 1] = (byte) ((word >>> 8) & 0xFF);
-        data[offset + 2] = (byte) ((word >>> 16) & 0xFF);
-        data[offset + 3] = (byte) ((word >>> 24) & 0xFF);
-      }
-      if (leftover > 0) {
-        int word = words[fullWords];
-        int offset = fullWords * 4;
-        for (int i = 0; i < leftover; i++) {
-          data[offset + i] = (byte) ((word >>> (8 * i)) & 0xFF);
-        }
-      }
-    }
-
-    private static String customBase64(String value) {
-      StringBuilder builder = new StringBuilder((value.length() / 3) * 4);
-      int fullLength = (value.length() / 3) * 3;
-      for (int index = 0; index < fullLength; index += 3) {
-        int block =
-            (value.charAt(index) << 16) | (value.charAt(index + 1) << 8) | value.charAt(index + 2);
-        builder.append(BASE64_ALPHABET.charAt((block >> 18) & 63));
-        builder.append(BASE64_ALPHABET.charAt((block >> 12) & 63));
-        builder.append(BASE64_ALPHABET.charAt((block >> 6) & 63));
-        builder.append(BASE64_ALPHABET.charAt(block & 63));
-      }
-      return builder.toString();
-    }
-
-    String generate(
-        String queryString, String body, String userAgent, int envcode, String version) {
-      long seconds = timestampMillis / 1000L;
-      Map<Integer, Object> values = new LinkedHashMap<>();
-      values.put(1, 1);
-      values.put(2, envcode);
-      values.put(3, md5Hex(queryString.getBytes(StandardCharsets.UTF_8)));
-      values.put(4, md5Hex(body.getBytes(StandardCharsets.UTF_8)));
-      values.put(5, md5Hex(userAgent.getBytes(StandardCharsets.UTF_8)));
-      values.put(6, (int) seconds);
-      values.put(7, 1508145731);
-      values.put(8, (int) ((timestampMillis * 1000L) % Integer.MAX_VALUE));
-      values.put(9, version);
-
-      if (!"5.1.1".equals(version) && !"5.1.0".equals(version)) {
-        throw new IllegalArgumentException("Unsupported version: " + version);
-      }
-      if ("5.1.1".equals(version)) {
-        values.put(10, "1.0.0.314");
-        values.put(11, 1);
-        int checksum = 0;
-        for (int index = 1; index <= 11; index++) {
-          Object value = values.get(index);
-          checksum ^= value instanceof Integer ? (Integer) value : beIntFromString((String) value);
-        }
-        values.put(12, checksum);
-      }
-
-      int zero = 0;
-      for (Object value : values.values()) {
-        if (value instanceof Integer intValue) {
-          zero ^= intValue;
-        }
-      }
-      values.put(0, zero);
-
-      List<Integer> payload = new ArrayList<>();
-      payload.add(values.size());
-      for (Map.Entry<Integer, Object> entry : values.entrySet()) {
-        payload.add(entry.getKey());
-        byte[] bytes =
-            entry.getValue() instanceof Integer intValue
-                ? toNumberBytes(intValue)
-                : ((String) entry.getValue()).getBytes(StandardCharsets.UTF_8);
-        addAll(payload, toNumberBytes(bytes.length));
-        addAll(payload, bytes);
-      }
-      String base = toAsciiString(payload);
-
-      int[] keyWords = new int[12];
-      List<Integer> keyBytes = new ArrayList<>(48);
-      int roundAccum = 0;
-      for (int i = 0; i < keyWords.length; i++) {
-        int word = (int) Math.floor(rand() * 4294967296.0d);
-        keyWords[i] = word;
-        roundAccum = (roundAccum + (word & 15)) & 15;
-        keyBytes.add(word & 0xFF);
-        keyBytes.add((word >>> 8) & 0xFF);
-        keyBytes.add((word >>> 16) & 0xFF);
-        keyBytes.add((word >>> 24) & 0xFF);
-      }
-      int rounds = roundAccum + 5;
-      String encrypted = encryptPayload(keyWords, rounds, base);
-
-      int insertPos = 0;
-      for (int value : keyBytes) {
-        insertPos = (insertPos + value) % (encrypted.length() + 1);
-      }
-      for (int index = 0; index < encrypted.length(); index++) {
-        insertPos = (insertPos + encrypted.charAt(index)) % (encrypted.length() + 1);
-      }
-
-      StringBuilder finalBuilder = new StringBuilder();
-      finalBuilder.append((char) (((1 << 6) ^ (1 << 3) ^ 3) & 0xFF));
-      finalBuilder.append(encrypted, 0, insertPos);
-      for (int value : keyBytes) {
-        finalBuilder.append((char) value);
-      }
-      finalBuilder.append(encrypted.substring(insertPos));
-      return customBase64(finalBuilder.toString());
-    }
-
-    private int nextRandomInt() {
-      return nextUnsignedInt(random);
-    }
-
-    private double rand() {
-      int[] block = chachaBlock(state, 8);
-      long left = Integer.toUnsignedLong(block[position]);
-      long right = (Integer.toUnsignedLong(block[position + 8]) & 0xFFFFFFF0L) >>> 11;
-      if (position == 7) {
-        state[12] = (int) ((Integer.toUnsignedLong(state[12]) + 1) & MASK32);
-        position = 0;
-      } else {
-        position++;
-      }
-      return (left + 4294967296.0d * right) / Math.pow(2, 53);
+    } catch (Exception e) {
+      throw new IllegalStateException("MD5 unavailable", e);
     }
   }
 }

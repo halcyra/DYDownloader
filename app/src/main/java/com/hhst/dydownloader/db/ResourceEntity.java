@@ -22,6 +22,7 @@ public class ResourceEntity {
 
   public int imageResId;
   public String text;
+  public String authorNickname;
   public CardType type;
   public long createTime;
   public int childrenNum;
@@ -84,9 +85,9 @@ public class ResourceEntity {
     entity.thumbnailUrl = item.thumbnailUrl();
     entity.sourceKey = item.sourceKey();
     entity.downloadPath = item.downloadPath();
+    entity.authorNickname = item.authorNickname();
     return entity;
   }
-
   public ResourceItem toResourceItem() {
     return new ResourceItem(
         platform,
@@ -94,6 +95,7 @@ public class ResourceEntity {
         parentId,
         imageResId,
         text,
+        authorNickname == null ? "" : authorNickname,
         type,
         createTime,
         childrenNum,
@@ -103,6 +105,7 @@ public class ResourceEntity {
         sourceKey,
         java.util.List.of(),
         false,
-        downloadPath); // Children should be loaded separately by parentId if needed
+        downloadPath,
+        "");
   }
 }

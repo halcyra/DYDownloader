@@ -1,6 +1,8 @@
 package com.hhst.dydownloader.downloader;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNull;
 
 import com.hhst.dydownloader.model.Platform;
@@ -16,6 +18,27 @@ import okhttp3.ResponseBody;
 import org.junit.Test;
 
 public class HttpDownloaderTest {
+
+  @Test
+  public void download_cancellationRemovesPartialFile() throws Exception {
+    OkHttpClient client = new OkHttpClient.Builder()
+        .addInterceptor(chain -> response(chain.request(), 200, "image/jpeg", jpegBytes(), null))
+        .build();
+    HttpDownloader downloader = new HttpDownloader(client, "", "");
+    File output = new File(Files.createTempDirectory("cancel-download").toFile(), "image.jpg");
+    try {
+      downloader.download("https://example.com/image.jpg", output,
+          (progress, downloaded, total) -> {
+            if (downloaded > 0) throw new java.util.concurrent.CancellationException();
+          }, HttpDownloader.ExpectedContent.IMAGE);
+      fail("Download should be cancelled");
+    } catch (java.util.concurrent.CancellationException expected) {
+      assertFalse(output.exists());
+      assertFalse(new File(output.getAbsolutePath() + ".part").exists());
+    } finally {
+      output.getParentFile().delete();
+    }
+  }
 
   @Test
   public void download_appliesPlatformHeadersToHeadAndGet() throws Exception {

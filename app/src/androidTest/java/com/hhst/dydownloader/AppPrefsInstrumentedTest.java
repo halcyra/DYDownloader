@@ -34,4 +34,16 @@ public class AppPrefsInstrumentedTest {
     AppPrefs.setCookie(appContext, "");
     assertFalse(AppPrefs.hasConfiguredCookie(appContext));
   }
+
+  @Test
+  public void downloadSubdirectoryPreference_defaultsOnAndCanToggle() {
+    AppPrefs.prefs(appContext).edit().remove(AppPrefs.KEY_USE_DOWNLOAD_SUBDIRECTORIES).commit();
+    assertTrue(AppPrefs.shouldUseDownloadSubdirectories(appContext));
+
+    AppPrefs.setUseDownloadSubdirectories(appContext, false);
+    assertFalse(AppPrefs.shouldUseDownloadSubdirectories(appContext));
+
+    AppPrefs.setUseDownloadSubdirectories(appContext, true);
+    assertTrue(AppPrefs.shouldUseDownloadSubdirectories(appContext));
+  }
 }

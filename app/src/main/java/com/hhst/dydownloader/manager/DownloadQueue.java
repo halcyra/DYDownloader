@@ -15,10 +15,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Predicate;
 
 public final class DownloadQueue {
 
@@ -85,9 +87,9 @@ public final class DownloadQueue {
     if (items == null || items.isEmpty()) {
       return 0;
     }
-    Set<String> existingResourceKeys = new HashSet<>();
+    Map<String, DownloadTask> existingTasks = new LinkedHashMap<>();
     for (DownloadTask task : TASKS) {
-      existingResourceKeys.add(task.getResourceKey());
+      existingTasks.put(task.getResourceKey(), task);
     }
     int added = 0;
     for (ResourceItem item : items) {
@@ -95,13 +97,22 @@ public final class DownloadQueue {
         continue;
       }
       String resourceKey = item.key();
-      if (resourceKey.isBlank() || existingResourceKeys.contains(resourceKey)) {
+      if (resourceKey.isBlank()) {
         continue;
+      }
+      DownloadTask existing = existingTasks.get(resourceKey);
+      if (existing != null) {
+        if (existing.getStatus() == DownloadTask.Status.QUEUED
+            || existing.getStatus() == DownloadTask.Status.DOWNLOADING) {
+          continue;
+        }
+        TASKS.remove(existing);
+        deletePersistedTaskAsync(existing.getKey());
       }
       DownloadTask task = new DownloadTask(item);
       TASKS.add(task);
       persistTaskAsync(task);
-      existingResourceKeys.add(resourceKey);
+      existingTasks.put(resourceKey, task);
       added++;
     }
     if (added > 0) {
@@ -112,10 +123,22 @@ public final class DownloadQueue {
   }
 
   public static synchronized void updateTask(DownloadTask task) {
-    if (task != null) {
-      persistTaskAsync(task);
-    }
+    if (!TASKS.contains(task)) return;
+    persistTaskAsync(task);
     notifyListeners();
+  }
+
+  static synchronized void requireActive(DownloadTask task) {
+    if (!TASKS.contains(task)) throw new CancellationException("Download removed");
+  }
+
+  static synchronized void completeTask(DownloadTask task, Runnable saveResource) {
+    requireActive(task);
+    // Removal and final persistence must not interleave and recreate a deleted card.
+    saveResource.run();
+    task.setStatus(DownloadTask.Status.COMPLETED);
+    task.setProgress(100);
+    updateTask(task);
   }
 
   public static synchronized void retryTask(DownloadTask task) {
@@ -124,12 +147,25 @@ public final class DownloadQueue {
     }
     for (DownloadTask existing : TASKS) {
       if (existing.getKey().equals(task.getKey())) {
+        if (existing.getStatus() != DownloadTask.Status.FAILED) return;
         existing.setStatus(DownloadTask.Status.QUEUED);
         existing.setProgress(0);
         existing.setError(null);
         persistTaskAsync(existing);
         notifyListeners();
         DownloadManager.getInstance().onQueueUpdated();
+        return;
+      }
+    }
+  }
+
+  public static synchronized void retryTaskFor(ResourceItem item) {
+    if (item == null) {
+      return;
+    }
+    for (DownloadTask existing : TASKS) {
+      if (existing.getResourceKey().equals(item.key())) {
+        retryTask(existing);
         return;
       }
     }
@@ -147,10 +183,7 @@ public final class DownloadQueue {
     if (item == null) {
       return;
     }
-    Set<String> targetKeys = new HashSet<>();
-    addTaskKey(targetKeys, item.key());
-    addTaskKey(targetKeys, item.sourceKey());
-    removeTasksByExactResourceKeys(targetKeys);
+    removeTasksByExactResourceKeys(Set.of(item.key()));
   }
 
   public static synchronized void removeTasksByResourceKeys(Set<String> resourceKeys) {
@@ -162,26 +195,7 @@ public final class DownloadQueue {
       return;
     }
 
-    boolean changed = false;
-    List<String> removedTaskKeys = new ArrayList<>();
-    Iterator<DownloadTask> iterator = TASKS.iterator();
-    while (iterator.hasNext()) {
-      DownloadTask existing = iterator.next();
-      if (!matchesAnyResourceKey(existing.getResourceKey(), normalizedTargets)) {
-        continue;
-      }
-      iterator.remove();
-      removedTaskKeys.add(existing.getKey());
-      changed = true;
-    }
-
-    for (String taskKey : removedTaskKeys) {
-      deletePersistedTaskAsync(taskKey);
-    }
-
-    if (changed) {
-      notifyListeners();
-    }
+    removeMatchingTasks(key -> matchesAnyResourceKey(key, normalizedTargets));
   }
 
   public static synchronized void removeTasksByExactResourceKeys(Set<String> resourceKeys) {
@@ -193,24 +207,26 @@ public final class DownloadQueue {
       return;
     }
 
-    boolean changed = false;
+    removeMatchingTasks(key -> matchesAnyExactResourceKey(key, normalizedTargets));
+  }
+
+  private static void removeMatchingTasks(Predicate<String> matches) {
     List<String> removedTaskKeys = new ArrayList<>();
     Iterator<DownloadTask> iterator = TASKS.iterator();
     while (iterator.hasNext()) {
       DownloadTask existing = iterator.next();
-      if (!matchesAnyExactResourceKey(existing.getResourceKey(), normalizedTargets)) {
+      if (!matches.test(existing.getResourceKey())) {
         continue;
       }
       iterator.remove();
       removedTaskKeys.add(existing.getKey());
-      changed = true;
     }
 
     for (String taskKey : removedTaskKeys) {
       deletePersistedTaskAsync(taskKey);
     }
 
-    if (changed) {
+    if (!removedTaskKeys.isEmpty()) {
       notifyListeners();
     }
   }
@@ -244,13 +260,8 @@ public final class DownloadQueue {
 
   private static Executor createMainThreadExecutor() {
     Handler mainHandler = new Handler(Looper.getMainLooper());
-    return runnable -> {
-      if (Looper.myLooper() == Looper.getMainLooper()) {
-        runnable.run();
-      } else {
-        mainHandler.post(runnable);
-      }
-    };
+    // Always enqueue so a main-thread removal cannot overtake older progress snapshots.
+    return mainHandler::post;
   }
 
   private static void restorePersistedTasks() {
@@ -283,7 +294,8 @@ public final class DownloadQueue {
     if (task == null) {
       return;
     }
-    DB_EXECUTOR.execute(() -> persistTask(task));
+    DownloadTask snapshot = task.copy();
+    DB_EXECUTOR.execute(() -> persistTask(snapshot));
   }
 
   private static void deletePersistedTask(String taskKey) {

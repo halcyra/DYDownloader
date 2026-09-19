@@ -31,25 +31,33 @@ import com.hhst.dydownloader.adapter.CardAdapter;
 import com.hhst.dydownloader.db.AppDatabase;
 import com.hhst.dydownloader.db.ResourceDao;
 import com.hhst.dydownloader.db.ResourceEntity;
+import com.hhst.dydownloader.home.HomeCard;
+import com.hhst.dydownloader.home.HomeCardList;
+import com.hhst.dydownloader.manager.DownloadQueue;
+import com.hhst.dydownloader.manager.DownloadTask;
+import com.hhst.dydownloader.manager.SourceKeyUtils;
 import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.ResourceItem;
 import com.squareup.picasso.Picasso;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-public class HomeFragment extends Fragment implements CardAdapter.OnCardClickListener {
+public class HomeFragment extends Fragment
+    implements CardAdapter.OnCardClickListener, DownloadQueue.Listener {
   private static final String STATE_SEARCH_TEXT = "state_search_text";
   private static final String STATE_SEARCH_MODE = "state_search_mode";
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
   private final AtomicBoolean destroyed = new AtomicBoolean(false);
-  private List<ResourceItem> fullList = new ArrayList<>();
+  private final List<ResourceItem> fullList = new ArrayList<>();
+  private final Map<String, HomeCard> queueCards = new HashMap<>();
   private CardAdapter adapter;
   private MaterialToolbar toolbar;
   private View searchContainer;
@@ -142,6 +150,8 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
     RecyclerView recyclerView = view.findViewById(R.id.recyclerView);
     recyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
     adapter = new CardAdapter(this);
+    adapter.setProgressColor(
+        MaterialColors.getColor(toolbar, androidx.appcompat.R.attr.colorPrimary));
     recyclerView.setAdapter(adapter);
 
     OnBackPressedCallback backPressedCallback =
@@ -174,6 +184,45 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
     loadFromDbAsync(true);
   }
 
+  @Override
+  public void onStart() {
+    super.onStart();
+    DownloadQueue.addListener(this);
+  }
+
+  @Override
+  public void onStop() {
+    DownloadQueue.removeListener(this);
+    super.onStop();
+  }
+
+  @Override
+  public void onQueueChanged(List<DownloadTask> tasks) {
+    Map<String, HomeCard> nextQueueCards = new HashMap<>();
+    boolean completedNow = false;
+    for (DownloadTask task : tasks) {
+      if (task.getStatus() == DownloadTask.Status.COMPLETED) {
+        HomeCard previous = queueCards.get(task.getResourceKey());
+        if (previous != null) {
+          // Keep the card visible until the saved resource has been loaded from the database.
+          nextQueueCards.put(task.getResourceKey(), HomeCard.fromTask(task));
+          completedNow |= previous.state() != HomeCard.State.DONE;
+        }
+        continue;
+      }
+      HomeCard card = HomeCard.fromTask(task);
+      nextQueueCards.put(card.key(), card);
+    }
+    queueCards.clear();
+    queueCards.putAll(nextQueueCards);
+    if (!destroyed.get()) {
+      updateDisplayList();
+      if (completedNow) {
+        loadFromDbAsync(false);
+      }
+    }
+  }
+
   private void loadFromDbAsync(boolean refreshOnly) {
     ExecutorService exec = dbExecutor;
     if (resourceDao == null || exec == null) {
@@ -188,8 +237,10 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
           } else {
             ResourceActions.consolidateTopLevelResources(resourceDao);
           }
+          List<ResourceEntity> roots = resourceDao.getByParentId(0);
+          restoreMissingAuthors(roots);
           List<ResourceItem> items =
-              resourceDao.getByParentId(0).stream()
+              roots.stream()
                   .map(ResourceEntity::toResourceItem)
                   .collect(Collectors.toList());
           mainHandler.post(
@@ -197,13 +248,36 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
                 if (destroyed.get() || generation != dataLoadGeneration || !isAdded()) {
                   return;
                 }
-                fullList = items;
+                fullList.clear();
+                fullList.addAll(items);
+                // The database copy now replaces any temporary completed queue cards.
+                queueCards.values().removeIf(card -> card.state() == HomeCard.State.DONE);
                 updateDisplayList();
                 if (refreshOnly && adapter != null && adapter.isSelectionMode()) {
                   exitSelectionMode();
                 }
               });
         });
+  }
+
+  private void restoreMissingAuthors(List<ResourceEntity> roots) {
+    Map<String, String> authorsByResource = new HashMap<>();
+    for (DownloadTask task : DownloadQueue.getTasks()) {
+      if (task.getStatus() != DownloadTask.Status.COMPLETED) continue;
+      ResourceItem item = task.getResourceItem();
+      if (item == null || item.authorNickname().isBlank()) continue;
+      String baseKey = SourceKeyUtils.baseOf(task.getResourceKey());
+      if (!baseKey.isBlank()) authorsByResource.putIfAbsent(baseKey, item.authorNickname());
+    }
+    for (ResourceEntity root : roots) {
+      if (root == null || (root.authorNickname != null && !root.authorNickname.isBlank())) continue;
+      String rawBase = SourceKeyUtils.rawSourceKey(SourceKeyUtils.baseOf(root.sourceKey));
+      if (rawBase.isBlank()) continue;
+      String author = authorsByResource.get(root.platform.name() + ":" + rawBase);
+      if (author == null || author.isBlank()) continue;
+      root.authorNickname = author;
+      resourceDao.update(root);
+    }
   }
 
   private void setupToolbar() {
@@ -329,11 +403,15 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   }
 
   private void confirmDelete() {
-    var selected = new ArrayList<>(adapter.getSelectedItems());
+    var selected = new ArrayList<>(adapter.getSelectedCards());
     if (selected.isEmpty()) {
       exitSelectionMode();
       return;
     }
+    confirmDeleteCards(selected, true);
+  }
+
+  private void confirmDeleteCards(List<HomeCard> selected, boolean batch) {
     ExecutorService exec = dbExecutor;
     if (exec == null) {
       return;
@@ -342,7 +420,7 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
         () -> {
           boolean hasLocalFiles =
               selected.stream()
-                  .map(item -> ResourceActions.resolveLocalMedia(resourceDao, item))
+                  .map(card -> ResourceActions.resolveLocalMedia(resourceDao, card.item()))
                   .anyMatch(ResourceActions.LocalMedia::canShare);
           mainHandler.post(
               () -> {
@@ -350,29 +428,33 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
                   return;
                 }
                 showDeleteDialog(
-                    R.string.dialog_batch_delete_title,
-                    getResources()
-                        .getQuantityString(
-                            R.plurals.dialog_batch_delete_message,
-                            selected.size(),
-                            selected.size()),
+                    batch
+                        ? R.string.dialog_batch_delete_title
+                        : R.string.dialog_delete_single_message,
+                    batch
+                        ? getResources()
+                            .getQuantityString(
+                                R.plurals.dialog_batch_delete_message,
+                                selected.size(),
+                                selected.size())
+                        : null,
                     hasLocalFiles,
-                    deleteLocalFiles -> deleteItemsAsync(selected, deleteLocalFiles, true));
+                    deleteLocalFiles -> deleteItemsAsync(selected, deleteLocalFiles, batch));
               });
         });
   }
 
   private void deleteItemsAsync(
-      List<ResourceItem> items, boolean deleteLocalFiles, boolean exitSelection) {
+      List<HomeCard> cards, boolean deleteLocalFiles, boolean exitSelection) {
     ExecutorService exec = dbExecutor;
     if (exec == null) {
       return;
     }
-    List<ResourceItem> snapshot = new ArrayList<>(items);
+    List<HomeCard> snapshot = new ArrayList<>(cards);
     exec.execute(
         () -> {
-          for (ResourceItem item : snapshot) {
-            ResourceActions.deleteResourceItem(resourceDao, item, deleteLocalFiles);
+          for (HomeCard card : snapshot) {
+            ResourceActions.deleteResourceItem(resourceDao, card.item(), deleteLocalFiles);
           }
           mainHandler.post(
               () -> {
@@ -387,6 +469,16 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
         });
   }
 
+  @Override
+  public void onCardRetryClick(HomeCard card) {
+    DownloadQueue.retryTaskFor(card.item());
+  }
+
+  @Override
+  public void onCardDeleteClick(HomeCard card) {
+    confirmDeleteCards(List.of(card), false);
+  }
+
   private void updateDisplayList() {
     String activeQuery =
         HomeSearchBehavior.effectiveQuery(
@@ -399,19 +491,9 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
           default -> Comparator.comparing(ResourceItem::createTime).reversed();
         };
 
-    List<ResourceItem> filtered =
-        fullList.stream()
-            .filter(
-                item ->
-                    item.text()
-                        .toLowerCase(Locale.getDefault())
-                        .contains(activeQuery.toLowerCase(Locale.getDefault())))
-            .filter(item -> filterType == null || item.type() == filterType)
-            .sorted(comparator)
-            .collect(Collectors.toList());
-
     if (adapter != null) {
-      adapter.submitList(filtered);
+      adapter.submitList(
+          HomeCardList.build(fullList, queueCards.values(), activeQuery, filterType, comparator));
     }
   }
 
@@ -508,10 +590,19 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   }
 
   @Override
-  public void onCardClick(ResourceItem item, int position) {
+  public void onCardClick(HomeCard card, int position) {
     if (searchMode) {
       exitSearchMode();
     }
+    if (card.state() == HomeCard.State.FAILED
+        || card.state() == HomeCard.State.QUEUED
+        || card.state() == HomeCard.State.DOWNLOADING) {
+      return;
+    }
+    if (queueCards.containsKey(card.key())) {
+      return;
+    }
+    ResourceItem item = card.item();
     if (item.id() == null || item.id() <= 0) {
       Toast.makeText(getContext(), R.string.contents_nonexistent, Toast.LENGTH_SHORT).show();
       return;
@@ -547,9 +638,10 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   }
 
   @Override
-  public void onCardLongClick(ResourceItem item, int position) {
+  public void onCardLongClick(HomeCard card, int position) {
     View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_card_detail, null);
     ImageView imageView = view.findViewById(R.id.dialogImage);
+    ResourceItem item = card.item();
     if (item.thumbnailUrl() != null && !item.thumbnailUrl().isEmpty()) {
       Picasso.get()
           .load(item.thumbnailUrl())
@@ -568,14 +660,15 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
   }
 
   @Override
-  public void onCardMoreClick(ResourceItem item, int position, View anchorView) {
+  public void onCardMoreClick(HomeCard card, int position, View anchorView) {
     ExecutorService exec = dbExecutor;
     if (exec == null) {
       return;
     }
     exec.execute(
         () -> {
-          ResourceActions.LocalMedia media = ResourceActions.resolveLocalMedia(resourceDao, item);
+          ResourceActions.LocalMedia media =
+              ResourceActions.resolveLocalMedia(resourceDao, card.item());
           mainHandler.post(
               () -> {
                 if (destroyed.get() || !isAdded()) {
@@ -583,30 +676,30 @@ public class HomeFragment extends Fragment implements CardAdapter.OnCardClickLis
                 }
                 PopupMenu popupMenu = new PopupMenu(requireContext(), anchorView);
                 popupMenu.inflate(R.menu.item_more_actions);
-                boolean canOpenDirectory = ResourceActions.hasDownloadDirectory(item);
-                popupMenu
-                    .getMenu()
-                    .findItem(R.id.action_open_with)
-                    .setEnabled(media.canOpenWith() || canOpenDirectory);
-                popupMenu.getMenu().findItem(R.id.action_share).setEnabled(media.canShare());
+                if (card.state() != HomeCard.State.DONE) {
+                  popupMenu.getMenu().findItem(R.id.action_open_with).setEnabled(false);
+                  popupMenu.getMenu().findItem(R.id.action_share).setEnabled(false);
+                } else {
+                  boolean canOpenDirectory = ResourceActions.hasDownloadDirectory(card.item());
+                  popupMenu
+                      .getMenu()
+                      .findItem(R.id.action_open_with)
+                      .setEnabled(media.canOpenWith() || canOpenDirectory);
+                  popupMenu.getMenu().findItem(R.id.action_share).setEnabled(media.canShare());
+                }
                 popupMenu.setOnMenuItemClickListener(
                     menuItem -> {
                       int id = menuItem.getItemId();
                       if (id == R.id.action_open_with) {
                         return media.canOpenWith()
                             ? ResourceActions.openWith(requireContext(), media)
-                            : ResourceActions.openDownloadDirectory(requireContext(), item);
+                            : ResourceActions.openDownloadDirectory(requireContext(), card.item());
                       }
                       if (id == R.id.action_share) {
                         return ResourceActions.share(requireContext(), media);
                       }
                       if (id == R.id.action_delete_item) {
-                        showDeleteDialog(
-                            R.string.dialog_delete_single_message,
-                            null,
-                            media.canShare(),
-                            deleteLocalFiles ->
-                                deleteItemsAsync(List.of(item), deleteLocalFiles, false));
+                        onCardDeleteClick(card);
                         return true;
                       }
                       return false;

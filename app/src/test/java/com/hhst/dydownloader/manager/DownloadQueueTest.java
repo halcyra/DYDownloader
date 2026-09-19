@@ -22,6 +22,59 @@ import org.junit.Test;
 public class DownloadQueueTest {
 
   @Test
+  public void removedTaskCannotCompleteOrReplaceANewTaskWithTheSameKey() throws Exception {
+    DownloadTask removed = task(Platform.DOUYIN, "same#video", DownloadTask.Status.DOWNLOADING);
+    DownloadTask replacement = task(Platform.DOUYIN, "same#video", DownloadTask.Status.QUEUED);
+    AtomicInteger saved = new AtomicInteger();
+    try {
+      clearTasks();
+      currentTasks().add(removed);
+      DownloadQueue.removeTask(removed);
+      currentTasks().add(replacement);
+      try {
+        DownloadQueue.completeTask(removed, saved::incrementAndGet);
+        fail("Removed download must be cancelled before saving");
+      } catch (java.util.concurrent.CancellationException expected) {
+        assertEquals(0, saved.get());
+      }
+      DownloadQueue.updateTask(removed);
+      assertEquals(DownloadTask.Status.QUEUED, DownloadQueue.getTasks().get(0).getStatus());
+    } finally {
+      clearTasks();
+    }
+  }
+
+  @Test
+  public void deletingOneLeafDoesNotRemoveWholeWorkOrOtherPlatforms() throws Exception {
+    DownloadTask leaf = task(Platform.DOUYIN, "work#photo:1", DownloadTask.Status.QUEUED);
+    DownloadTask root = task(Platform.DOUYIN, "work", DownloadTask.Status.QUEUED);
+    DownloadTask other = task(Platform.TIKTOK, "work#photo:1", DownloadTask.Status.QUEUED);
+    try {
+      clearTasks();
+      currentTasks().addAll(List.of(leaf, root, other));
+      DownloadQueue.removeTasksForResource(leaf.getResourceItem());
+      assertEquals(Set.of(root.getResourceKey(), other.getResourceKey()), DownloadQueue.getQueuedKeys());
+    } finally {
+      clearTasks();
+    }
+  }
+
+  @Test
+  public void retryDoesNotResetAnActiveDownload() throws Exception {
+    DownloadTask active = task(Platform.DOUYIN, "work", DownloadTask.Status.DOWNLOADING);
+    active.setProgress(70);
+    try {
+      clearTasks();
+      currentTasks().add(active);
+      DownloadQueue.retryTaskFor(active.getResourceItem());
+      assertEquals(DownloadTask.Status.DOWNLOADING, active.getStatus());
+      assertEquals(70, active.getProgress());
+    } finally {
+      clearTasks();
+    }
+  }
+
+  @Test
   public void collectKeysByStatuses_excludesFailedTasksFromQueuedKeys() {
     DownloadTask queued = task(Platform.DOUYIN, "aweme-a#photo:1", DownloadTask.Status.QUEUED);
     DownloadTask downloading =

@@ -10,3 +10,5 @@
 app/bin/
 app/build/
 app/release/
+hs_err_pid*.log
+replay_pid*.log

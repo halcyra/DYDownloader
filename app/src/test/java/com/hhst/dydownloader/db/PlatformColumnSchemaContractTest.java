@@ -16,10 +16,10 @@ public class PlatformColumnSchemaContractTest {
           "(?s)(@NonNull\\s+@ColumnInfo\\(defaultValue = \"'DOUYIN'\"\\)|"
               + "@ColumnInfo\\(defaultValue = \"'DOUYIN'\"\\)\\s+@NonNull)\\s+"
               + "public Platform platform = Platform\\.DOUYIN;");
-  private static final Pattern DATABASE_VERSION_7 =
-      Pattern.compile("(?s)@Database\\([^)]*version\\s*=\\s*7");
-  private static final Pattern MIGRATION_6_7 =
-      Pattern.compile("new Migration\\(6,\\s*7\\)");
+  private static final Pattern DATABASE_VERSION_8 =
+      Pattern.compile("(?s)@Database\\([^)]*version\\s*=\\s*8");
+  private static final Pattern MIGRATION_7_8 =
+      Pattern.compile("new Migration\\(7,\\s*8\\)");
 
   @Test
   public void resourceEntity_platformColumnMatchesMigrationContract() throws IOException {
@@ -41,15 +41,15 @@ public class PlatformColumnSchemaContractTest {
   @Test
   public void appDatabase_bumpsVersionAfterPlatformSchemaChange() throws IOException {
     assertTrue(
-        DATABASE_VERSION_7
+        DATABASE_VERSION_8
             .matcher(readMainJava("com", "hhst", "dydownloader", "db", "AppDatabase.java"))
             .find());
   }
 
   @Test
-  public void appDatabase_declaresMigrationFrom6To7() throws IOException {
+  public void appDatabase_declaresMigrationFrom7To8() throws IOException {
     assertTrue(
-        MIGRATION_6_7
+        MIGRATION_7_8
             .matcher(readMainJava("com", "hhst", "dydownloader", "db", "AppDatabase.java"))
             .find());
   }

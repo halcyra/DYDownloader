@@ -2,14 +2,19 @@ package com.hhst.dydownloader;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.textfield.TextInputEditText;
 import com.hhst.dydownloader.model.Platform;
 import org.apache.commons.io.FileUtils;
 
 public class SettingsActivity extends AppCompatActivity {
-  private TextView currentLanguage, cacheText, cookieStatus;
+  private TextView currentLanguage, cacheText, cookieStatus, downloadSubdirectoriesSummary,
+      fileNamingSummary;
+  private MaterialSwitch downloadSubdirectoriesSwitch;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -39,10 +44,28 @@ public class SettingsActivity extends AppCompatActivity {
     currentLanguage = findViewById(R.id.currentLanguage);
     cacheText = findViewById(R.id.cacheSize);
     cookieStatus = findViewById(R.id.cookieStatus);
+    downloadSubdirectoriesSummary = findViewById(R.id.downloadSubdirectoriesSummary);
+    downloadSubdirectoriesSwitch = findViewById(R.id.downloadSubdirectoriesSwitch);
+    fileNamingSummary = findViewById(R.id.fileNamingSummary);
     updateCurrentLanguage();
     updateCookieStatus();
+    updateDownloadSubdirectorySetting();
+    updateFileNameTemplate();
 
     findViewById(R.id.layoutLanguage).setOnClickListener(v -> showLanguageDialog());
+    findViewById(R.id.layoutDownloadSubdirectories)
+        .setOnClickListener(
+            v -> {
+              boolean enabled = !downloadSubdirectoriesSwitch.isChecked();
+              AppPrefs.setUseDownloadSubdirectories(this, enabled);
+              updateDownloadSubdirectorySetting();
+            });
+    downloadSubdirectoriesSwitch.setOnCheckedChangeListener(
+        (buttonView, isChecked) -> {
+          AppPrefs.setUseDownloadSubdirectories(this, isChecked);
+          updateDownloadSubdirectorySetting();
+        });
+    findViewById(R.id.layoutFileNaming).setOnClickListener(v -> showFileNameTemplateDialog());
     findViewById(R.id.layoutClearCache).setOnClickListener(v -> showClearCacheDialog());
     findViewById(R.id.layoutCookies)
         .setOnClickListener(
@@ -59,6 +82,32 @@ public class SettingsActivity extends AppCompatActivity {
     super.onResume();
     updateCurrentLanguage();
     updateCookieStatus();
+    updateDownloadSubdirectorySetting();
+    updateFileNameTemplate();
+  }
+
+  private void showFileNameTemplateDialog() {
+    View view = getLayoutInflater().inflate(R.layout.dialog_file_name_template, null);
+    var input = (TextInputEditText) view.findViewById(R.id.fileNameTemplateInput);
+    input.setText(AppPrefs.getFileNameTemplate(this));
+    new AlertDialog.Builder(this)
+        .setTitle(R.string.file_naming)
+        .setView(view)
+        .setPositiveButton(
+            R.string.dialog_ok,
+            (dialog, which) -> {
+              CharSequence text = input.getText();
+              AppPrefs.setFileNameTemplate(this, text == null ? "" : text.toString());
+              updateFileNameTemplate();
+            })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  private void updateFileNameTemplate() {
+    if (fileNamingSummary != null) {
+      fileNamingSummary.setText(AppPrefs.getFileNameTemplate(this));
+    }
   }
 
   private void showLanguageDialog() {
@@ -139,5 +188,19 @@ public class SettingsActivity extends AppCompatActivity {
                 ? R.string.settings_status_request_only
                 : R.string.settings_status_unset;
     cookieStatus.setText(statusResId);
+  }
+
+  private void updateDownloadSubdirectorySetting() {
+    if (downloadSubdirectoriesSwitch == null || downloadSubdirectoriesSummary == null) {
+      return;
+    }
+    boolean enabled = AppPrefs.shouldUseDownloadSubdirectories(this);
+    if (downloadSubdirectoriesSwitch.isChecked() != enabled) {
+      downloadSubdirectoriesSwitch.setChecked(enabled);
+    }
+    downloadSubdirectoriesSummary.setText(
+        enabled
+            ? R.string.download_subdirectories_summary_on
+            : R.string.download_subdirectories_summary_off);
   }
 }

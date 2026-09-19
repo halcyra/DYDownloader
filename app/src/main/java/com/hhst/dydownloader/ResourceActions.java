@@ -13,7 +13,6 @@ import androidx.annotation.Nullable;
 import com.hhst.dydownloader.db.ResourceDao;
 import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.manager.DownloadQueue;
-import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.manager.SourceKeyUtils;
 import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.Platform;
@@ -39,11 +38,6 @@ public final class ResourceActions {
       return new LocalMedia(item.text(), null, List.of(item.downloadPath()));
     }
     return LocalMedia.empty(item != null ? item.text() : "");
-  }
-
-  public static LocalMedia resolveLocalMedia(
-      @NonNull ResourceDao resourceDao, @Nullable DownloadTask task) {
-    return resolveLocalMedia(resourceDao, task != null ? task.getResourceItem() : null);
   }
 
   public static boolean openWith(@NonNull Context context, @NonNull LocalMedia media) {
@@ -121,15 +115,6 @@ public final class ResourceActions {
     return item != null;
   }
 
-  public static boolean hasDownloadDirectory(@Nullable DownloadTask task) {
-    return task != null && hasDownloadDirectory(task.getResourceItem());
-  }
-
-  public static boolean openDownloadDirectory(
-      @NonNull Context context, @Nullable DownloadTask task) {
-    return openDownloadDirectory(context, task != null ? task.getResourceItem() : null);
-  }
-
   public static boolean openDownloadDirectory(
       @NonNull Context context, @Nullable ResourceItem item) {
     if (item == null) {
@@ -180,6 +165,13 @@ public final class ResourceActions {
 
   public static boolean deleteResourceItem(
       @NonNull ResourceDao resourceDao, @Nullable ResourceItem item, boolean deleteLocalFiles) {
+    if (item != null) {
+      if (item.isLeaf()) {
+        DownloadQueue.removeTasksForResource(item);
+      } else {
+        DownloadQueue.removeTasksByResourceKeys(Set.of(item.key()));
+      }
+    }
     ResourceEntity target =
         item != null && item.isLeaf()
             ? resolveExactEntity(resourceDao, item)
@@ -193,9 +185,6 @@ public final class ResourceActions {
         && !item.downloadPath().isBlank()) {
       deleteFile(item.downloadPath());
     }
-    if (item != null) {
-      DownloadQueue.removeTasksForResource(item);
-    }
     return item != null;
   }
 
@@ -205,9 +194,14 @@ public final class ResourceActions {
       return false;
     }
 
-    List<String> pathsToDelete = collectOwnedPaths(resourceDao, target);
     boolean groupTaskRemoval = !target.isLeaf;
     Set<String> taskKeysToDelete = collectOwnedTaskKeys(resourceDao, target, groupTaskRemoval);
+    if (groupTaskRemoval) {
+      DownloadQueue.removeTasksByResourceKeys(taskKeysToDelete);
+    } else {
+      DownloadQueue.removeTasksByExactResourceKeys(taskKeysToDelete);
+    }
+    List<String> pathsToDelete = collectOwnedPaths(resourceDao, target);
 
     if (target.isLeaf && target.parentId > 0) {
       ResourceEntity parent = resourceDao.getById(target.parentId);
@@ -225,11 +219,6 @@ public final class ResourceActions {
       for (String path : pathsToDelete) {
         deleteFile(path);
       }
-    }
-    if (groupTaskRemoval) {
-      DownloadQueue.removeTasksByResourceKeys(taskKeysToDelete);
-    } else {
-      DownloadQueue.removeTasksByExactResourceKeys(taskKeysToDelete);
     }
     return true;
   }
@@ -574,6 +563,11 @@ public final class ResourceActions {
         && !duplicate.downloadPath.isBlank()) {
       primary.downloadPath = duplicate.downloadPath;
     }
+    if ((primary.authorNickname == null || primary.authorNickname.isBlank())
+        && duplicate.authorNickname != null
+        && !duplicate.authorNickname.isBlank()) {
+      primary.authorNickname = duplicate.authorNickname;
+    }
     primary.childrenNum = Math.max(primary.childrenNum, duplicate.childrenNum);
     primary.createTime = Math.max(primary.createTime, duplicate.createTime);
     if ((primary.sourceKey == null || primary.sourceKey.isBlank())
@@ -735,11 +729,11 @@ public final class ResourceActions {
 
   private static String resolveDownloadDirectory(
       @NonNull ResourceItem item, @NonNull Context context) {
-    if (item.storageDir() != null && !item.storageDir().isBlank()) {
-      return item.storageDir();
-    }
     if (item.downloadPath() != null && !item.downloadPath().isBlank()) {
       return StorageReferenceUtils.resolvePublicDownloadRelativeDir(context, item.downloadPath());
+    }
+    if (item.storageDir() != null && !item.storageDir().isBlank()) {
+      return item.storageDir();
     }
     return "";
   }

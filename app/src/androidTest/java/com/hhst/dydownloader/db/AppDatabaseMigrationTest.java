@@ -1,5 +1,7 @@
 package com.hhst.dydownloader.db;
 
+import static org.junit.Assert.assertEquals;
+
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import androidx.room.Room;
@@ -71,6 +73,37 @@ public class AppDatabaseMigrationTest {
     openMigratedDatabase();
   }
 
+  @Test
+  public void upgradeVersion7_preservesRowsAndStoresAuthors() {
+    createMigratedVersion6Database();
+    try (SQLiteDatabase old = SQLiteDatabase.openDatabase(
+        appContext.getDatabasePath(DATABASE_NAME).getPath(), null, SQLiteDatabase.OPEN_READWRITE)) {
+      old.setVersion(7);
+    }
+    AppDatabase database = Room.databaseBuilder(appContext, AppDatabase.class, DATABASE_NAME)
+        .addMigrations(AppDatabase.migrations()).build();
+    try {
+      ResourceEntity resource = database.resourceDao().getByParentId(0).get(0);
+      DownloadTaskEntity task = database.downloadTaskDao().getAll().get(0);
+      assertEquals("aweme-2#video", resource.sourceKey);
+      assertEquals("", resource.toResourceItem().authorNickname());
+      assertEquals("", task.toTask().getResourceItem().authorNickname());
+      resource.authorNickname = "Creator";
+      database.resourceDao().update(resource);
+      task.authorNickname = "Creator";
+      database.downloadTaskDao().upsert(task);
+    } finally {
+      database.close();
+    }
+    database = Room.databaseBuilder(appContext, AppDatabase.class, DATABASE_NAME).build();
+    try {
+      assertEquals("Creator", database.resourceDao().getByParentId(0).get(0).authorNickname);
+      assertEquals("Creator", database.downloadTaskDao().getAll().get(0).authorNickname);
+    } finally {
+      database.close();
+    }
+  }
+
   private void openMigratedDatabase() {
     AppDatabase database =
         Room.databaseBuilder(appContext, AppDatabase.class, DATABASE_NAME)
@@ -110,34 +143,31 @@ public class AppDatabaseMigrationTest {
       String taskKey,
       String sourceKey,
       String taskPlatformValue) {
-    SQLiteDatabase database = openVersion6Database();
-    try {
-      database.execSQL(CREATE_RESOURCES_SQL_PREFIX + resourcesPlatformColumn + ")");
-      database.execSQL(CREATE_DOWNLOAD_TASKS_SQL_PREFIX + tasksPlatformColumn + ")");
-      database.execSQL(
-          "INSERT INTO resources ("
-              + "parentId, imageResId, text, type, createTime, childrenNum, isLeaf, "
-              + "downloadPath, thumbnailUrl, sourceKey, progress, status, platform"
-              + ") VALUES (0, 0, 'item', 'ALBUM', 1, 0, 1, '', '', "
-              + sourceKey
-              + ", 0, 'pending', "
-              + resourcePlatformValue
-              + ")");
-      database.execSQL(
-          "INSERT INTO download_tasks ("
-              + "taskKey, resourceId, parentId, imageResId, text, type, createTime, "
-              + "childrenNum, isLeaf, thumbnailUrl, sourceKey, downloadUrlsJson, imagePost, "
-              + "status, progress, error, addedAt, storageDir, platform"
-              + ") VALUES ("
-              + taskKey
-              + ", NULL, 0, 0, 'item', 'ALBUM', 1, 0, 1, '', "
-              + sourceKey
-              + ", '[]', 0, 'QUEUED', 0, NULL, 1, '', "
-              + taskPlatformValue
-              + ")");
-    } finally {
-      database.close();
-    }
+      try (SQLiteDatabase database = openVersion6Database()) {
+          database.execSQL(CREATE_RESOURCES_SQL_PREFIX + resourcesPlatformColumn + ")");
+          database.execSQL(CREATE_DOWNLOAD_TASKS_SQL_PREFIX + tasksPlatformColumn + ")");
+          database.execSQL(
+                  "INSERT INTO resources ("
+                          + "parentId, imageResId, text, type, createTime, childrenNum, isLeaf, "
+                          + "downloadPath, thumbnailUrl, sourceKey, progress, status, platform"
+                          + ") VALUES (0, 0, 'item', 'ALBUM', 1, 0, 1, '', '', "
+                          + sourceKey
+                          + ", 0, 'pending', "
+                          + resourcePlatformValue
+                          + ")");
+          database.execSQL(
+                  "INSERT INTO download_tasks ("
+                          + "taskKey, resourceId, parentId, imageResId, text, type, createTime, "
+                          + "childrenNum, isLeaf, thumbnailUrl, sourceKey, downloadUrlsJson, imagePost, "
+                          + "status, progress, error, addedAt, storageDir, platform"
+                          + ") VALUES ("
+                          + taskKey
+                          + ", NULL, 0, 0, 'item', 'ALBUM', 1, 0, 1, '', "
+                          + sourceKey
+                          + ", '[]', 0, 'QUEUED', 0, NULL, 1, '', "
+                          + taskPlatformValue
+                          + ")");
+      }
   }
 
   private SQLiteDatabase openVersion6Database() {

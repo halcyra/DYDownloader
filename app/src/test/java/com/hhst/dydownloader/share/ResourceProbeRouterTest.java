@@ -12,6 +12,12 @@ import org.junit.Test;
 public class ResourceProbeRouterTest {
 
   @Test
+  public void plan_keepsAllProbesForTiktokTLinks() {
+    assertEquals(List.of(LinkKind.WORK, LinkKind.ACCOUNT, LinkKind.MIX),
+        ResourceProbeRouter.plan("https://www.tiktok.com/t/AbCd123/").probeKinds());
+  }
+
+  @Test
   public void plan_routesTiktokWorkLinksToTiktokPlatform() {
     ResourceProbeRouter.Plan plan =
         ResourceProbeRouter.plan("https://www.tiktok.com/@creator/video/7345678901234567890");
@@ -49,5 +55,13 @@ public class ResourceProbeRouterTest {
 
     assertFalse(plan.supported());
     assertEquals(LinkKind.UNKNOWN, plan.kind());
+  }
+
+  @Test
+  public void plan_rejectsKnownPlatformHomePageWithoutProbing() {
+    ResourceProbeRouter.Plan plan = ResourceProbeRouter.plan("https://www.douyin.com/");
+
+    assertFalse(plan.supported());
+    assertEquals(List.of(), plan.probeKinds());
   }
 }

@@ -88,6 +88,18 @@ final class ResourceScreenSnapshot {
     if (json == null || json.isBlank()) {
       return new ArrayList<>();
     }
-    return new ArrayList<>(OBJECT_MAPPER.readValue(json, RESOURCE_LIST_TYPE));
+    List<ResourceItem> items = OBJECT_MAPPER.readValue(json, RESOURCE_LIST_TYPE);
+    return validItems(items) ? new ArrayList<>(items) : new ArrayList<>();
+  }
+
+  private static boolean validItems(List<ResourceItem> items) {
+    if (items == null) return false;
+    for (ResourceItem item : items) {
+      if (item == null || item.type() == null
+          || (item.children() != null && !validItems(item.children()))) {
+        return false;
+      }
+    }
+    return true;
   }
 }

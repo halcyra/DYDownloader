@@ -68,6 +68,17 @@ public class HttpDownloader {
   public File download(
       String url, File outputFile, ProgressCallback callback, ExpectedContent expectedContent)
       throws IOException {
+    try {
+      return downloadToFile(url, outputFile, callback, expectedContent);
+    } finally {
+      File partial = new File(outputFile.getAbsolutePath() + ".part");
+      if (partial.exists()) partial.delete();
+    }
+  }
+
+  private File downloadToFile(
+      String url, File outputFile, ProgressCallback callback, ExpectedContent expectedContent)
+      throws IOException {
     if (outputFile.getParentFile() != null) {
       outputFile.getParentFile().mkdirs();
     }
@@ -124,7 +135,7 @@ public class HttpDownloader {
       }
     }
 
-    // Replace output atomically.
+    // Publish the completed temporary file.
     File tmpFile = new File(outputFile.getAbsolutePath() + ".part");
     if (!tmpFile.exists()) {
       throw new IOException("Download failed: temp file missing");

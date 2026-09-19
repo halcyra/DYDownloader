@@ -12,16 +12,11 @@ import android.view.ViewGroup;
 import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.viewpager2.adapter.FragmentStateAdapter;
-import androidx.viewpager2.widget.ViewPager2;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.textfield.TextInputEditText;
 import com.hhst.dydownloader.manager.DownloadQueue;
@@ -29,18 +24,14 @@ import com.hhst.dydownloader.share.ShareLinkResolver;
 
 public class MainActivity extends AppCompatActivity {
 
-  private static final String KEY_SELECTED_TAB = "selected_tab";
   private static final long EXIT_CONFIRM_WINDOW_MS = 2000L;
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
-  private int selectedTabId = R.id.nav_home;
-  private ViewPager2 viewPager;
   private View clipboardPrompt;
   private View topPromptAnchor;
   private Runnable hideClipboardPromptRunnable;
   private Runnable clearExitPendingRunnable;
   private long lastBackPressedAt;
   private int systemBarTopInset;
-  private boolean cookieSetupPromptShowing;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -75,45 +66,12 @@ public class MainActivity extends AppCompatActivity {
               openResourceFromShareText(text);
             });
 
-    if (savedInstanceState != null) {
-      selectedTabId = savedInstanceState.getInt(KEY_SELECTED_TAB, R.id.nav_home);
-    }
-
-    var bottomNavigation = (BottomNavigationView) findViewById(R.id.bottomNavigation);
-    viewPager = findViewById(R.id.viewPager);
-    viewPager.setAdapter(new MainPagerAdapter(this));
-    viewPager.registerOnPageChangeCallback(
-        new ViewPager2.OnPageChangeCallback() {
-          @Override
-          public void onPageSelected(int position) {
-            selectedTabId = position == 1 ? R.id.nav_downloads : R.id.nav_home;
-            if (bottomNavigation.getSelectedItemId() != selectedTabId) {
-              bottomNavigation.setSelectedItemId(selectedTabId);
-            }
-            updateClipboardPromptAnchor();
-          }
-        });
-
-    bottomNavigation.setOnItemSelectedListener(
-        item -> {
-          selectedTabId = item.getItemId();
-          viewPager.setCurrentItem(selectedTabId == R.id.nav_downloads ? 1 : 0, true);
-          return true;
-        });
-
-    viewPager.setCurrentItem(selectedTabId == R.id.nav_downloads ? 1 : 0, false);
-
     ViewCompat.setOnApplyWindowInsetsListener(
         findViewById(R.id.main),
         (v, insets) -> {
           var systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
           systemBarTopInset = systemBars.top;
-          v.setPadding(systemBars.left, 0, systemBars.right, 0);
-          bottomNavigation.setPadding(
-              bottomNavigation.getPaddingLeft(),
-              bottomNavigation.getPaddingTop(),
-              bottomNavigation.getPaddingRight(),
-              Math.min(systemBars.bottom, dpToPx(16)));
+          v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
           updateClipboardPromptAnchor();
           return insets;
         });
@@ -142,49 +100,11 @@ public class MainActivity extends AppCompatActivity {
   }
 
   @Override
-  protected void onSaveInstanceState(@NonNull Bundle outState) {
-    super.onSaveInstanceState(outState);
-    outState.putInt(KEY_SELECTED_TAB, selectedTabId);
-  }
-
-  @Override
   protected void onResume() {
     super.onResume();
-    if (maybeShowCookieSetupPrompt()) {
-      return;
-    }
     if (((DYDownloaderApp) getApplication()).consumeClipboardCheckPending()) {
       findViewById(R.id.main).postDelayed(this::maybeShowClipboardLoadPrompt, 250);
     }
-  }
-
-  private boolean maybeShowCookieSetupPrompt() {
-    if (cookieSetupPromptShowing || !AppPrefs.shouldShowCookieSetupPrompt(this)) {
-      return false;
-    }
-    cookieSetupPromptShowing = true;
-    findViewById(R.id.main)
-        .post(
-            () -> {
-              if (isFinishing() || isDestroyed()) {
-                cookieSetupPromptShowing = false;
-                return;
-              }
-              new MaterialAlertDialogBuilder(this)
-                  .setMessage(R.string.cookie_setup_prompt_message)
-                  .setPositiveButton(
-                      R.string.cookie_setup_prompt_positive,
-                      (dialog, which) -> {
-                        AppPrefs.dismissCookieSetupPrompt(this);
-                        startActivity(new Intent(this, CookiesActivity.class));
-                      })
-                  .setNegativeButton(
-                      R.string.cookie_setup_prompt_negative,
-                      (dialog, which) -> AppPrefs.dismissCookieSetupPrompt(this))
-                  .setOnDismissListener(dialog -> cookieSetupPromptShowing = false)
-                  .show();
-            });
-    return true;
   }
 
   private void onDownloadClick() {
@@ -292,8 +212,7 @@ public class MainActivity extends AppCompatActivity {
       return;
     }
     ViewGroup.LayoutParams anchorLayout = topPromptAnchor.getLayoutParams();
-    int toolbarOffset = selectedTabId == R.id.nav_home ? resolveToolbarOffset() : 0;
-    int promptOffset = systemBarTopInset + toolbarOffset;
+    int promptOffset = systemBarTopInset + resolveToolbarOffset();
     if (anchorLayout.height != promptOffset) {
       anchorLayout.height = promptOffset;
       topPromptAnchor.setLayoutParams(anchorLayout);
@@ -333,22 +252,5 @@ public class MainActivity extends AppCompatActivity {
 
   private int dpToPx(int dp) {
     return Math.round(dp * getResources().getDisplayMetrics().density);
-  }
-
-  private static class MainPagerAdapter extends FragmentStateAdapter {
-    MainPagerAdapter(@NonNull AppCompatActivity activity) {
-      super(activity);
-    }
-
-    @NonNull
-    @Override
-    public androidx.fragment.app.Fragment createFragment(int pos) {
-      return pos == 1 ? new DownloadsFragment() : new HomeFragment();
-    }
-
-    @Override
-    public int getItemCount() {
-      return 2;
-    }
   }
 }

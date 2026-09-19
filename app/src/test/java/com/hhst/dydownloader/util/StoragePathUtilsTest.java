@@ -6,6 +6,14 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class StoragePathUtilsTest {
+  @Test
+  public void expandFileNameTemplate_doesNotExpandPlaceholdersInsideMetadata() {
+    assertEquals(
+        "A{desc}_Price $5 {id}_123",
+        StoragePathUtils.expandFileNameTemplate(
+            "{author}_{desc}_{id}", "A{desc}", "Price $5 {id}", "2026-09-26", "123"));
+  }
+
 
   @Test
   public void sanitizeSegment_shortensLongNamesWithStableSuffix() {
@@ -40,5 +48,34 @@ public class StoragePathUtilsTest {
   @Test
   public void buildPublicDownloadDisplayPath_usesUnifiedRootForBlankRelativeDirectory() {
     assertEquals("Download/DYDownloader", StoragePathUtils.buildPublicDownloadDisplayPath(""));
+  }
+
+  @Test
+  public void expandFileNameTemplate_defaultsToDescription() {
+    assertEquals(
+        "分享日常",
+        StoragePathUtils.expandFileNameTemplate(null, "作者", "分享日常", "2026-09-19", "709384"));
+  }
+
+  @Test
+  public void expandFileNameTemplate_expandsAllPlaceholders() {
+    assertEquals(
+        "作者_分享日常_2026-09-19_709384",
+        StoragePathUtils.expandFileNameTemplate(
+            "{author}_{desc}_{date}_{id}", "作者", "分享日常", "2026-09-19", "709384"));
+  }
+
+  @Test
+  public void expandFileNameTemplate_collapsesSeparatorsLeftByEmptyPlaceholders() {
+    assertEquals(
+        "分享日常_709384",
+        StoragePathUtils.expandFileNameTemplate("{author}_{desc}_{id}", "", "分享日常", "", "709384"));
+  }
+
+  @Test
+  public void expandFileNameTemplate_keepsUnknownPlaceholdersVerbatim() {
+    assertEquals(
+        "{title}_分享日常",
+        StoragePathUtils.expandFileNameTemplate("{title}_{desc}", "作者", "分享日常", "2026", "709"));
   }
 }

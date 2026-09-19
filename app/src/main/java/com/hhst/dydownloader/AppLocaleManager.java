@@ -35,8 +35,7 @@ public final class AppLocaleManager {
       return TAG_EN;
     }
     return switch (languageTag) {
-      case "English", TAG_EN -> TAG_EN;
-      case "中文", "简体中文", "簡體中文", TAG_ZH_CN -> TAG_ZH_CN;
+        case "中文", "简体中文", "簡體中文", TAG_ZH_CN -> TAG_ZH_CN;
       case "繁體中文", "繁体中文", TAG_ZH_TW -> TAG_ZH_TW;
       default -> TAG_EN;
     };

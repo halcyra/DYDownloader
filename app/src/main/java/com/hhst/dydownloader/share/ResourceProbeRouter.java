@@ -2,6 +2,7 @@ package com.hhst.dydownloader.share;
 
 import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.share.ShareLinkResolver.LinkKind;
+import java.net.URI;
 import java.util.List;
 import java.util.Locale;
 
@@ -34,10 +35,13 @@ public final class ResourceProbeRouter {
     if (url == null || url.isBlank()) {
       return false;
     }
-    String normalized = url.toLowerCase(Locale.ROOT);
-    return normalized.contains("://vm.tiktok.com/")
-        || normalized.contains("://vt.tiktok.com/")
-        || normalized.contains("://v.douyin.com/");
+    URI uri = URI.create(url);
+    String host = uri.getHost().toLowerCase(Locale.ROOT);
+    return host.equals("vm.tiktok.com")
+        || host.equals("vt.tiktok.com")
+        || host.equals("v.douyin.com")
+        || ((host.equals("tiktok.com") || host.equals("www.tiktok.com"))
+            && uri.getPath().startsWith("/t/"));
   }
 
   public record Plan(Platform platform, LinkKind kind, List<LinkKind> probeKinds, String url) {
