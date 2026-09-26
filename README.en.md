@@ -12,9 +12,9 @@ DYDownloader is a fully open-source and free Android app for downloading waterma
 
 <p align="center">
   <img src="assets/screenshot-home.png" width="24%" alt="Home">
-  <img src="assets/screenshot-downloads.png" width="24%" alt="Download queue">
   <img src="assets/screenshot-settings.png" width="24%" alt="Settings">
   <img src="assets/screenshot-file-naming.png" width="24%" alt="File naming rule">
+  <img src="assets/screenshot-cookies.png" width="24%" alt="Cookies">
 </p>
 
 ## Features
