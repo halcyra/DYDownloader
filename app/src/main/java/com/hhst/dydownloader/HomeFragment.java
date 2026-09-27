@@ -33,6 +33,7 @@ import com.hhst.dydownloader.db.ResourceDao;
 import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.home.HomeCard;
 import com.hhst.dydownloader.home.HomeCardList;
+import com.hhst.dydownloader.manager.DownloadPermission;
 import com.hhst.dydownloader.manager.DownloadQueue;
 import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.manager.SourceKeyUtils;
@@ -55,6 +56,7 @@ public class HomeFragment extends Fragment
   private static final String STATE_SEARCH_TEXT = "state_search_text";
   private static final String STATE_SEARCH_MODE = "state_search_mode";
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
+  private final DownloadPermission downloadPermission = new DownloadPermission(this);
   private final AtomicBoolean destroyed = new AtomicBoolean(false);
   private final List<ResourceItem> fullList = new ArrayList<>();
   private final Map<String, HomeCard> queueCards = new HashMap<>();
@@ -105,6 +107,17 @@ public class HomeFragment extends Fragment
   }
 
   @Override
+  public void onDestroyView() {
+    dataLoadGeneration++;
+    adapter = null;
+    toolbar = null;
+    searchContainer = null;
+    searchInput = null;
+    searchCloseButton = null;
+    super.onDestroyView();
+  }
+
+  @Override
   public void onDestroy() {
     destroyed.set(true);
     if (dbExecutor != null) {
@@ -122,7 +135,6 @@ public class HomeFragment extends Fragment
     resourceDao = database.resourceDao();
     sortType = AppPrefs.getHomeSort(requireContext());
     filterType = AppPrefs.getHomeFilter(requireContext());
-    loadFromDbAsync(false);
 
     toolbar = view.findViewById(R.id.toolbar);
     searchContainer = view.findViewById(R.id.searchContainer);
@@ -231,12 +243,8 @@ public class HomeFragment extends Fragment
     int generation = ++dataLoadGeneration;
     exec.execute(
         () -> {
-          if (database != null) {
-            database.runInTransaction(
-                () -> ResourceActions.consolidateTopLevelResources(resourceDao));
-          } else {
-            ResourceActions.consolidateTopLevelResources(resourceDao);
-          }
+          database.runInTransaction(
+              () -> ResourceActions.consolidateTopLevelResources(resourceDao));
           List<ResourceEntity> roots = resourceDao.getByParentId(0);
           restoreMissingAuthors(roots);
           List<ResourceItem> items =
@@ -471,7 +479,7 @@ public class HomeFragment extends Fragment
 
   @Override
   public void onCardRetryClick(HomeCard card) {
-    DownloadQueue.retryTaskFor(card.item());
+    downloadPermission.runWhenGranted(() -> DownloadQueue.retryTaskFor(card.item()));
   }
 
   @Override
@@ -590,7 +598,7 @@ public class HomeFragment extends Fragment
   }
 
   @Override
-  public void onCardClick(HomeCard card, int position) {
+  public void onCardClick(HomeCard card) {
     if (searchMode) {
       exitSearchMode();
     }
@@ -638,7 +646,7 @@ public class HomeFragment extends Fragment
   }
 
   @Override
-  public void onCardLongClick(HomeCard card, int position) {
+  public void onCardLongClick(HomeCard card) {
     View view = LayoutInflater.from(getContext()).inflate(R.layout.dialog_card_detail, null);
     ImageView imageView = view.findViewById(R.id.dialogImage);
     ResourceItem item = card.item();
@@ -660,7 +668,7 @@ public class HomeFragment extends Fragment
   }
 
   @Override
-  public void onCardMoreClick(HomeCard card, int position, View anchorView) {
+  public void onCardMoreClick(HomeCard card, View anchorView) {
     ExecutorService exec = dbExecutor;
     if (exec == null) {
       return;

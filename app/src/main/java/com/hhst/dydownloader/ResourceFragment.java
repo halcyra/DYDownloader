@@ -23,6 +23,7 @@ import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.douyin.AwemeProfile;
 import com.hhst.dydownloader.douyin.DouyinDownloader;
 import com.hhst.dydownloader.douyin.MediaType;
+import com.hhst.dydownloader.manager.DownloadPermission;
 import com.hhst.dydownloader.manager.DownloadQueue;
 import com.hhst.dydownloader.manager.DownloadTask;
 import com.hhst.dydownloader.model.CardType;
@@ -33,8 +34,8 @@ import com.hhst.dydownloader.share.ShareLinkResolver;
 import com.hhst.dydownloader.share.ShareLinkResolver.LinkKind;
 import com.hhst.dydownloader.tiktok.TikTokDownloader;
 import com.hhst.dydownloader.util.MediaSourceUtils;
-import com.hhst.dydownloader.util.StorageReferenceUtils;
 import com.hhst.dydownloader.util.StoragePathUtils;
+import com.hhst.dydownloader.util.StorageReferenceUtils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -65,6 +66,7 @@ public class ResourceFragment extends Fragment
   private static final String ARG_RESOURCE_SNAPSHOT = "resource_snapshot";
 
   private final Set<String> selectedKeys = new HashSet<>();
+  private final DownloadPermission downloadPermission = new DownloadPermission(this);
   private final AtomicBoolean destroyed = new AtomicBoolean(false);
   private final Set<String> queuedKeys = new HashSet<>();
   private final Set<String> completedQueueKeys = new HashSet<>();
@@ -186,6 +188,23 @@ public class ResourceFragment extends Fragment
   }
 
   @Override
+  public void onDestroyView() {
+    loadGeneration++;
+    mediaStateGeneration++;
+    if (inFlightLoad != null) {
+      inFlightLoad.cancel(true);
+      inFlightLoad = null;
+    }
+    adapter = null;
+    filterGroup = null;
+    actionBar = null;
+    btnToggleSelectAll = null;
+    btnDownload = null;
+    loadingProgress = null;
+    super.onDestroyView();
+  }
+
+  @Override
   public void onDestroy() {
     destroyed.set(true);
     if (inFlightLoad != null) {
@@ -199,6 +218,10 @@ public class ResourceFragment extends Fragment
     if (dbExecutor != null) {
       dbExecutor.shutdownNow();
       dbExecutor = null;
+    }
+    ResourceScreenStore.remove(screenKey);
+    if (isRemoving() || (getActivity() != null && getActivity().isFinishing())) {
+      ResourceScreenSnapshot.delete(getSnapshotDirectory(), snapshotToken);
     }
     super.onDestroy();
   }
@@ -273,9 +296,9 @@ public class ResourceFragment extends Fragment
     applyResourceFilter();
     refreshQueueState(true);
 
-    if (shareLink != null && resourceList.isEmpty()) {
+    if (shareLink != null && allResourceList.isEmpty()) {
       startConcurrentLoading(shareLink);
-    } else if (resourceId > 0 && resourceList.isEmpty()) {
+    } else if (resourceId > 0 && allResourceList.isEmpty()) {
       loadFromDatabaseAsync(resourceId);
     } else {
       loadingProgress.setVisibility(View.GONE);
@@ -806,7 +829,7 @@ public class ResourceFragment extends Fragment
   }
 
   @Override
-  public void onResourceClick(ResourceItem item, int position) {
+  public void onResourceClick(ResourceItem item) {
     if (!(getActivity() instanceof ResourceActivity)) {
       return;
     }
@@ -1148,9 +1171,6 @@ public class ResourceFragment extends Fragment
   }
 
   @Override
-  public void onResourceLongClick(ResourceItem item, int position) {}
-
-  @Override
   public void onResourceSelectToggle(ResourceItem item, int position) {
     if (isFromHome() || item == null || isQueued(item)) return;
     if (!selectedKeys.remove(item.key())) selectedKeys.add(item.key());
@@ -1226,6 +1246,10 @@ public class ResourceFragment extends Fragment
   }
 
   private void enqueueSelection(List<ResourceItem> selectedItems) {
+    downloadPermission.runWhenGranted(() -> addSelectionToQueue(selectedItems));
+  }
+
+  private void addSelectionToQueue(List<ResourceItem> selectedItems) {
     int added = DownloadQueue.addAll(selectedItems);
     selectedKeys.clear();
     refreshQueueState(true);
@@ -1330,9 +1354,7 @@ public class ResourceFragment extends Fragment
         switch (task.getStatus()) {
           case QUEUED, DOWNLOADING -> nextQueuedKeys.add(resourceKey);
           case COMPLETED -> nextCompletedKeys.add(resourceKey);
-          case FAILED -> {
-            // Failed items stay selectable and do not trigger downloaded-state refreshes.
-          }
+          case FAILED -> {}
         }
       }
     }

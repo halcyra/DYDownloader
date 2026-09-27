@@ -102,17 +102,23 @@ public class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardViewHolder
 
     holder.itemView.setOnClickListener(
         v -> {
-          if (selectionMode) toggleSelection(card);
-          else listener.onCardClick(card, position);
+          int currentPosition = holder.getBindingAdapterPosition();
+          if (currentPosition == RecyclerView.NO_POSITION) return;
+          if (selectionMode) toggleSelection(card, currentPosition);
+          else listener.onCardClick(card);
         });
     holder.itemView.setOnLongClickListener(
         v -> {
-          if (!selectionMode) listener.onCardLongClick(card, position);
+          if (!selectionMode && holder.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
+            listener.onCardLongClick(card);
+          }
           return true;
         });
     holder.cardMore.setOnClickListener(
         v -> {
-          if (!selectionMode) listener.onCardMoreClick(card, position, v);
+          if (!selectionMode && holder.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
+            listener.onCardMoreClick(card, v);
+          }
         });
   }
 
@@ -213,9 +219,9 @@ public class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardViewHolder
     }
   }
 
-  private void toggleSelection(HomeCard card) {
+  private void toggleSelection(HomeCard card, int position) {
     if (!selectedKeys.remove(card.key())) selectedKeys.add(card.key());
-    notifyItemChanged(cardList.indexOf(card));
+    notifyItemChanged(position);
     if (listener != null) listener.onSelectionChanged(selectedKeys.size());
   }
 
@@ -239,11 +245,11 @@ public class CardAdapter extends RecyclerView.Adapter<CardAdapter.CardViewHolder
   }
 
   public interface OnCardClickListener {
-    void onCardClick(HomeCard card, int position);
+    void onCardClick(HomeCard card);
 
-    void onCardLongClick(HomeCard card, int position);
+    void onCardLongClick(HomeCard card);
 
-    default void onCardMoreClick(HomeCard card, int position, View anchorView) {}
+    default void onCardMoreClick(HomeCard card, View anchorView) {}
 
     default void onCardRetryClick(HomeCard card) {}
 

@@ -2,7 +2,6 @@ package com.hhst.dydownloader.manager;
 
 import static org.junit.Assert.assertEquals;
 
-import com.hhst.dydownloader.db.ResourceEntity;
 import com.hhst.dydownloader.douyin.AwemeProfile;
 import com.hhst.dydownloader.douyin.MediaType;
 import com.hhst.dydownloader.model.CardType;
@@ -14,12 +13,10 @@ import org.junit.Test;
 public class DownloadAuthorTest {
 
   @Test
-  public void downloadWithoutProfileKeepsSourceAuthorThroughResourceEntity() {
+  public void downloadWithoutProfileKeepsSourceAuthor() {
     ResourceItem item = item("创作者");
 
     assertEquals("创作者", DownloadManager.resolveAuthorNickname(null, item));
-    assertEquals(
-        "创作者", ResourceEntity.fromResourceItem(0L, item).toResourceItem().authorNickname());
   }
 
   @Test

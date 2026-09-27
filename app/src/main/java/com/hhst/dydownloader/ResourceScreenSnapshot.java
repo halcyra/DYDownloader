@@ -11,9 +11,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 final class ResourceScreenSnapshot {
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final Pattern TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9_-]+");
   private static final TypeReference<List<ResourceItem>> RESOURCE_LIST_TYPE =
       new TypeReference<>() {};
 
@@ -25,7 +27,7 @@ final class ResourceScreenSnapshot {
     }
     try {
       String resolvedToken =
-          token == null || token.isBlank() ? UUID.randomUUID().toString() : token.trim();
+          isFileToken(token) ? token.trim() : UUID.randomUUID().toString();
       if (directory != null && !directory.exists()) {
         directory.mkdirs();
       }
@@ -49,7 +51,7 @@ final class ResourceScreenSnapshot {
       if (trimmedToken.startsWith("[") || trimmedToken.startsWith("{")) {
         return deserialize(trimmedToken);
       }
-      if (directory == null) {
+      if (directory == null || !isFileToken(trimmedToken)) {
         return new ArrayList<>();
       }
       File snapshotFile = new File(directory, trimmedToken + ".json");
@@ -60,6 +62,16 @@ final class ResourceScreenSnapshot {
     } catch (Exception ignored) {
       return new ArrayList<>();
     }
+  }
+
+  static void delete(File directory, String token) {
+    if (directory != null && isFileToken(token)) {
+      new File(directory, token.trim() + ".json").delete();
+    }
+  }
+
+  private static boolean isFileToken(String token) {
+    return token != null && TOKEN_PATTERN.matcher(token.trim()).matches();
   }
 
   private static void writeSnapshot(File snapshotFile, String payload) throws Exception {

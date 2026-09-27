@@ -69,25 +69,6 @@ public class ResourceEntity {
     this(Platform.DOUYIN, parentId, imageResId, text, type, createTime, childrenNum, isLeaf);
   }
 
-  @Ignore
-  public static ResourceEntity fromResourceItem(long parentId, ResourceItem item) {
-    ResourceEntity entity =
-        new ResourceEntity(
-            item.platform(),
-            parentId,
-            item.imageResId(),
-            item.text(),
-            item.type(),
-            item.createTime(),
-            item.childrenNum(),
-            item.isLeaf());
-    entity.id = item.id() != null ? item.id() : 0;
-    entity.thumbnailUrl = item.thumbnailUrl();
-    entity.sourceKey = item.sourceKey();
-    entity.downloadPath = item.downloadPath();
-    entity.authorNickname = item.authorNickname();
-    return entity;
-  }
   public ResourceItem toResourceItem() {
     return new ResourceItem(
         platform,
@@ -104,7 +85,7 @@ public class ResourceEntity {
         null,
         sourceKey,
         java.util.List.of(),
-        false,
+        type == CardType.PHOTO,
         downloadPath,
         "");
   }

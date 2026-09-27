@@ -40,7 +40,7 @@ public final class StorageReferenceUtils {
   public static Uri buildPublicDownloadDirectoryUri(@Nullable String relativeDir) {
     String relativePath =
         Environment.DIRECTORY_DOWNLOADS + "/" + StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME;
-    String normalizedRelativeDir = normalizeRelativeDir(relativeDir);
+    String normalizedRelativeDir = StoragePathUtils.normalizeRelativeDir(relativeDir);
     if (!normalizedRelativeDir.isBlank()) {
       relativePath += "/" + normalizedRelativeDir;
     }
@@ -50,7 +50,7 @@ public final class StorageReferenceUtils {
 
   public static File buildPublicDownloadDirectoryFile(@Nullable String relativeDir) {
     File rootDirectory = publicDownloadsRootDirectory();
-    String normalizedRelativeDir = normalizeRelativeDir(relativeDir);
+    String normalizedRelativeDir = StoragePathUtils.normalizeRelativeDir(relativeDir);
     return normalizedRelativeDir.isBlank()
         ? rootDirectory
         : new File(rootDirectory, normalizedRelativeDir);
@@ -199,42 +199,6 @@ public final class StorageReferenceUtils {
     return "";
   }
 
-  public static long sizeOfReference(@Nullable Context context, @Nullable String reference) {
-    if (reference == null || reference.isBlank()) {
-      return -1L;
-    }
-    if (!isContentReference(reference)) {
-      File file = new File(reference);
-      return file.exists() && file.isFile() ? file.length() : -1L;
-    }
-    Context safeContext = context != null ? context : DYDownloaderApp.getInstance();
-    if (safeContext == null) {
-      return -1L;
-    }
-    try (Cursor cursor =
-        safeContext
-            .getContentResolver()
-            .query(Uri.parse(reference), new String[] {OpenableColumns.SIZE}, null, null, null)) {
-      if (cursor != null && cursor.moveToFirst()) {
-        int columnIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
-        if (columnIndex >= 0) {
-          long size = cursor.getLong(columnIndex);
-          return size >= 0 ? size : -1L;
-        }
-      }
-    } catch (Exception ignored) {
-    }
-    return -1L;
-  }
-
-  private static String normalizeRelativeDir(@Nullable String relativeDir) {
-    if (relativeDir == null || relativeDir.isBlank()) {
-      return "";
-    }
-    String[] parts = relativeDir.replace('\\', '/').split("/");
-    return StoragePathUtils.joinSegments(parts);
-  }
-
   private static String relativeDirFromFileReference(@NonNull String reference) {
     File file = new File(reference);
     File directory = file.isDirectory() ? file : file.getParentFile();
@@ -245,14 +209,14 @@ public final class StorageReferenceUtils {
     File downloadsRoot = publicDownloadsRootDirectory();
     String rootPath = downloadsRoot.getAbsolutePath().replace('\\', '/');
     String directoryPath = directory.getAbsolutePath().replace('\\', '/');
-    if (!directoryPath.startsWith(rootPath)) {
+    if (!directoryPath.equals(rootPath) && !directoryPath.startsWith(rootPath + "/")) {
       return "";
     }
     String relative = directoryPath.substring(rootPath.length());
     if (relative.startsWith("/")) {
       relative = relative.substring(1);
     }
-    return normalizeRelativeDir(relative);
+    return StoragePathUtils.normalizeRelativeDir(relative);
   }
 
   private static String normalizePublicDownloadsRelativePath(@Nullable String relativePath) {
@@ -270,12 +234,10 @@ public final class StorageReferenceUtils {
     if (normalized.endsWith("/")) {
       normalized = normalized.substring(0, normalized.length() - 1);
     }
-    return normalizeRelativeDir(normalized);
+    return StoragePathUtils.normalizeRelativeDir(normalized);
   }
 
   public static File publicDownloadsRootDirectory() {
-    // Keep using the shared public Downloads root so existing visible storage paths remain
-    // unchanged.
     return new File(
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
         StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME);

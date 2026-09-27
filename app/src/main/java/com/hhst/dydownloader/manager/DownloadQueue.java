@@ -8,7 +8,6 @@ import com.hhst.dydownloader.db.DownloadTaskDao;
 import com.hhst.dydownloader.db.DownloadTaskEntity;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -33,8 +32,6 @@ public final class DownloadQueue {
             t.setDaemon(true);
             return t;
           });
-  private static final Set<DownloadTask.Status> QUEUE_STATUSES =
-      EnumSet.of(DownloadTask.Status.QUEUED, DownloadTask.Status.DOWNLOADING);
   private static volatile Executor listenerExecutor = Runnable::run;
   private static boolean initialized;
   private static DownloadTaskDao downloadTaskDao;
@@ -67,20 +64,6 @@ public final class DownloadQueue {
       }
     }
     return null;
-  }
-
-  public static synchronized Set<String> getQueuedKeys() {
-    return collectKeysByStatuses(TASKS, QUEUE_STATUSES);
-  }
-
-  public static synchronized Set<String> getCompletedKeys() {
-    Set<String> keys = new HashSet<>();
-    for (DownloadTask task : TASKS) {
-      if (task.getStatus() == DownloadTask.Status.COMPLETED) {
-        keys.add(task.getResourceKey());
-      }
-    }
-    return keys;
   }
 
   public static synchronized int addAll(List<ResourceItem> items) {
@@ -168,14 +151,6 @@ public final class DownloadQueue {
         retryTask(existing);
         return;
       }
-    }
-  }
-
-  public static synchronized void removeTask(DownloadTask task) {
-    if (task != null) {
-      TASKS.removeIf(existing -> existing.getKey().equals(task.getKey()));
-      deletePersistedTaskAsync(task.getKey());
-      notifyListeners();
     }
   }
 
@@ -389,24 +364,6 @@ public final class DownloadQueue {
       snapshot.add(task.copy());
     }
     return snapshot;
-  }
-
-  static Set<String> collectKeysByStatuses(
-      List<DownloadTask> tasks, Set<DownloadTask.Status> statuses) {
-    Set<String> keys = new HashSet<>();
-    if (tasks == null || tasks.isEmpty() || statuses == null || statuses.isEmpty()) {
-      return keys;
-    }
-    for (DownloadTask task : tasks) {
-      if (task == null || !statuses.contains(task.getStatus())) {
-        continue;
-      }
-      String resourceKey = SourceKeyUtils.normalize(task.getResourceKey());
-      if (!resourceKey.isEmpty()) {
-        keys.add(resourceKey);
-      }
-    }
-    return keys;
   }
 
   static boolean matchesAnyResourceKey(String taskResourceKey, Set<String> normalizedTargets) {

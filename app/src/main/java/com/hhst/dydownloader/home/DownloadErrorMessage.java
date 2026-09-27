@@ -1,6 +1,5 @@
 package com.hhst.dydownloader.home;
 
-/** 把异常消息压缩成卡片上可显示的一行失败原因。 */
 public final class DownloadErrorMessage {
 
   private DownloadErrorMessage() {}

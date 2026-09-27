@@ -1,25 +1,22 @@
 package com.hhst.dydownloader.douyin;
 
+import static com.hhst.dydownloader.util.SignatureDigest.md5Hex;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 抖音 WebSign（x-secsdk-web-signature）签名，移植自 DouK-Downloader
- * (TikTokDownloader) 的 secsdk runtime_bundler_34.js 逆向实现，
- * 与 src/encrypt/websign.py 保持一致。
+ * WebSign implementation based on DouK-Downloader's secsdk runtime_bundler_34.js.
  *
- * <p>仅受保护且 query 含 uifid 的接口需要追加 timestamp 与签名；签名覆盖其
- * 前面的完整 query（含 a_bogus）与 timestamp 参数，不含签名参数本身。
+ * <p>The signature covers the normalized query, including a_bogus, uifid and timestamp.
  */
 public final class WebSignGenerator {
   private static final String SIGNATURE_PARAM = "x-secsdk-web-signature";
   private static final String UIFID_PARAM = "uifid";
   private static final String TIMESTAMP_PARAM = "timestamp";
 
-  // douyin_web 项目的盐值
   private static final String SALT = "A96D855A08C0A9707F8BEF0D9A527E4E";
 
   // Python quote 的 safe='*-._'：WebSign 原生百分号编码的额外安全字符
@@ -27,10 +24,8 @@ public final class WebSignGenerator {
 
   private WebSignGenerator() {}
 
-  /** 对 query 追加访客时间戳并计算 x-secsdk-web-signature，返回最终可直接发送的 query。 */
   public static String sign(String query, String uifid, long timestampSeconds) {
     String stamp = String.valueOf(timestampSeconds);
-    // 预映像中的 query 即发送字节序本身：签名覆盖的字节与发送的字节一致
     List<String[]> pairs = decodePairs(query);
     boolean hasUifid = false;
     for (String[] pair : pairs) {
@@ -53,7 +48,6 @@ public final class WebSignGenerator {
     return encodePairs(decodePairs(query));
   }
 
-  /** 按 & 拆分 query 为键值对并解码。 */
   private static List<String[]> decodePairs(String query) {
     List<String[]> pairs = new ArrayList<>();
     for (String part : query.split("&")) {
@@ -68,7 +62,6 @@ public final class WebSignGenerator {
     return pairs;
   }
 
-  /** 序列化 pairs，使用 WebSign 原生百分号编码规则（safe='*-._'）。 */
   private static String encodePairs(List<String[]> pairs) {
     StringBuilder builder = new StringBuilder();
     for (String[] pair : pairs) {
@@ -147,19 +140,5 @@ public final class WebSignGenerator {
 
   private static byte[] utf8(String text) {
     return text.getBytes(StandardCharsets.UTF_8);
-  }
-
-  private static String md5Hex(byte[] input) {
-    try {
-      byte[] digest = MessageDigest.getInstance("MD5").digest(input);
-      StringBuilder builder = new StringBuilder(digest.length * 2);
-      for (byte value : digest) {
-        builder.append(Character.forDigit((value >> 4) & 0xF, 16));
-        builder.append(Character.forDigit(value & 0xF, 16));
-      }
-      return builder.toString();
-    } catch (Exception e) {
-      throw new IllegalStateException("MD5 unavailable", e);
-    }
   }
 }

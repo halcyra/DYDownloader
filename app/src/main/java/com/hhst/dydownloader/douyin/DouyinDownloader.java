@@ -4,8 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hhst.dydownloader.douyin.exception.AwemeDetailFetchException;
 import com.hhst.dydownloader.douyin.exception.DouyinDownloaderException;
-import com.hhst.dydownloader.douyin.exception.FileDownloadException;
 import com.hhst.dydownloader.douyin.exception.WorkListFetchException;
+import com.hhst.dydownloader.util.HostAllowList;
+import com.hhst.dydownloader.util.ShareUrls;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -16,7 +17,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,9 +29,6 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public final class DouyinDownloader {
-  public static final Pattern URL_PATTERN =
-      Pattern.compile(
-          "(https?://[^\\s\"<>^`{|}\\uFF0C\\u3002\\uFF1B\\uFF01\\uFF1F\\u3001\\u3010\\u3011\\u300A\\u300B]+)");
   private static final Pattern AWEME_ID_PATTERN = Pattern.compile("(?<!\\d)(\\d{19})(?!\\d)");
   private static final Pattern SEC_USER_ID_URL_PATTERN = Pattern.compile("/user/([^/?#]+)");
   private static final Pattern SEC_USER_ID_QUERY_PATTERN =
@@ -46,8 +43,7 @@ public final class DouyinDownloader {
   private static final int DEFAULT_MAX_PAGES = 200;
   private static final int ACCOUNT_PAGE_SIZE = 18;
   private static final int MIX_PAGE_SIZE = 12;
-  private static final String[] TRUSTED_SHARE_HOSTS = {"douyin.com", "iesdouyin.com"};
-  private static final String[] TRUSTED_COOKIE_HOSTS = {"douyin.com", "iesdouyin.com"};
+  private static final List<String> TRUSTED_HOSTS = List.of("douyin.com", "iesdouyin.com");
   // 必须与 a_bogus 签名使用的 UA 一致（第三条摘要链与其绑定）
   private static final String DEFAULT_USER_AGENT =
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -83,10 +79,6 @@ public final class DouyinDownloader {
     this(defaultClient(), cookie);
   }
 
-  public DouyinDownloader(String cookie, int ignoredDownloadThreads) {
-    this(defaultClient(), cookie);
-  }
-
   public DouyinDownloader(OkHttpClient httpClient, String cookie) {
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.objectMapper = new ObjectMapper();
@@ -94,30 +86,17 @@ public final class DouyinDownloader {
     this.defaultCookie = normalizeCookie(cookie);
   }
 
-  public DouyinDownloader(OkHttpClient httpClient, String cookie, int ignoredDownloadThreads) {
-    this(httpClient, cookie);
-  }
-
-  public static boolean containsDouyinLink(String text) {
-    return extractSupportedShareUrl(text).isPresent();
-  }
-
   public static boolean isTrustedShareUrl(String url) {
-    return isHostInAllowList(url, TRUSTED_SHARE_HOSTS);
+    return HostAllowList.matches(url, TRUSTED_HOSTS);
   }
 
   public static boolean shouldAttachCookie(String url) {
-    return isHostInAllowList(url, TRUSTED_COOKIE_HOSTS);
+    return HostAllowList.matches(url, TRUSTED_HOSTS);
   }
 
   public static boolean isAccountLink(String text) {
     if (text == null) return false;
     return text.contains("/user/") || text.contains("sec_user_id");
-  }
-
-  public static boolean isMixLink(String text) {
-    if (text == null) return false;
-    return text.contains("/collection/") || text.contains("mix_id");
   }
 
   private static OkHttpClient defaultClient() {
@@ -145,47 +124,6 @@ public final class DouyinDownloader {
     return extraParams;
   }
 
-  private static Optional<String> extractSupportedShareUrl(String text) {
-    Optional<String> firstUrl = extractFirstUrl(text);
-    if (firstUrl.isEmpty()) {
-      return Optional.empty();
-    }
-    return isTrustedShareUrl(firstUrl.get()) ? firstUrl : Optional.empty();
-  }
-
-  private static boolean isHostInAllowList(String url, String[] allowList) {
-    if (url == null || url.isBlank()) {
-      return false;
-    }
-    try {
-      URI uri = URI.create(url.trim());
-      String host = uri.getHost();
-      if (host == null || host.isBlank()) {
-        return false;
-      }
-      String normalizedHost = host.toLowerCase(Locale.ROOT);
-      for (String allowedHost : allowList) {
-        if (normalizedHost.equals(allowedHost) || normalizedHost.endsWith("." + allowedHost)) {
-          return true;
-        }
-      }
-      return false;
-    } catch (Exception ignored) {
-      return false;
-    }
-  }
-
-  private static Optional<String> extractFirstUrl(String text) {
-    if (text == null || text.trim().isEmpty()) {
-      return Optional.empty();
-    }
-    Matcher matcher = URL_PATTERN.matcher(text);
-    if (matcher.find()) {
-      return Optional.ofNullable(matcher.group(1));
-    }
-    return Optional.empty();
-  }
-
   public AwemeProfile collectWorkInfo(String shareLink) throws DouyinDownloaderException {
     return collectWorkInfo(shareLink, this.defaultCookie);
   }
@@ -198,65 +136,27 @@ public final class DouyinDownloader {
 
   public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink)
       throws DouyinDownloaderException {
-    return collectAccountWorksInfo(accountShareLink, this.defaultCookie, null);
-  }
-
-  public List<AwemeProfile> collectAccountWorksInfo(
-      String accountShareLink, DownloadProgressCallback progressCallback)
-      throws DouyinDownloaderException {
-    return collectAccountWorksInfo(accountShareLink, this.defaultCookie, progressCallback);
+    return collectAccountWorksInfo(accountShareLink, this.defaultCookie);
   }
 
   public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink, String cookie)
       throws DouyinDownloaderException {
-    return collectAccountWorksInfo(accountShareLink, cookie, null);
-  }
-
-  public List<AwemeProfile> collectAccountWorksInfo(
-      String accountShareLink, String cookie, DownloadProgressCallback progressCallback)
-      throws DouyinDownloaderException {
-    WorkListContext context = resolveAccountWorkListContext(accountShareLink, cookie);
-    return collectAwemeProfileList(context.awemeList(), "account_info", progressCallback);
+    ResolvedShareLink resolved = resolveShareLink(accountShareLink, cookie);
+    String secUserId =
+        resolveSecUserId(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
+    return collectAwemeProfileList(fetchAccountAwemeList(secUserId, resolved.normalizedCookie()));
   }
 
   public List<AwemeProfile> collectMixWorksInfo(String mixShareLink)
       throws DouyinDownloaderException {
-    return collectMixWorksInfo(mixShareLink, this.defaultCookie, null);
-  }
-
-  public List<AwemeProfile> collectMixWorksInfo(
-      String mixShareLink, DownloadProgressCallback progressCallback)
-      throws DouyinDownloaderException {
-    return collectMixWorksInfo(mixShareLink, this.defaultCookie, progressCallback);
+    return collectMixWorksInfo(mixShareLink, this.defaultCookie);
   }
 
   public List<AwemeProfile> collectMixWorksInfo(String mixShareLink, String cookie)
       throws DouyinDownloaderException {
-    return collectMixWorksInfo(mixShareLink, cookie, null);
-  }
-
-  public List<AwemeProfile> collectMixWorksInfo(
-      String mixShareLink, String cookie, DownloadProgressCallback progressCallback)
-      throws DouyinDownloaderException {
-    WorkListContext context = resolveMixWorkListContext(mixShareLink, cookie);
-    return collectAwemeProfileList(context.awemeList(), "mix_info", progressCallback);
-  }
-
-  private WorkListContext resolveAccountWorkListContext(String accountShareLink, String cookie)
-      throws DouyinDownloaderException {
-    ResolvedShareLink resolved = resolveShareLink(accountShareLink, cookie);
-    String secUserId =
-        resolveSecUserId(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
-    List<JsonNode> awemeList = fetchAccountAwemeList(secUserId, resolved.normalizedCookie());
-    return new WorkListContext(resolved.normalizedCookie(), awemeList);
-  }
-
-  private WorkListContext resolveMixWorkListContext(String mixShareLink, String cookie)
-      throws DouyinDownloaderException {
     ResolvedShareLink resolved = resolveShareLink(mixShareLink, cookie);
     String mixId = resolveMixId(mixShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
-    List<JsonNode> awemeList = fetchMixAwemeList(mixId, resolved.normalizedCookie());
-    return new WorkListContext(resolved.normalizedCookie(), awemeList);
+    return collectAwemeProfileList(fetchMixAwemeList(mixId, resolved.normalizedCookie()));
   }
 
   private SingleAwemeContext resolveSingleAwemeContext(String shareLink, String cookie)
@@ -276,50 +176,29 @@ public final class DouyinDownloader {
                                 new IllegalArgumentException(
                                     "Cannot extract aweme_id from shareLink")));
     JsonNode aweme = fetchAwemeDetail(awemeId, resolved.normalizedCookie());
-    return new SingleAwemeContext(resolved.normalizedCookie(), awemeId, aweme);
+    return new SingleAwemeContext(awemeId, aweme);
   }
 
   private ResolvedShareLink resolveShareLink(String shareLink, String cookie) {
     String normalizedCookie = normalizeCookie(cookie);
-    Optional<String> extractedUrl = extractFirstUrl(shareLink);
+    Optional<String> extractedUrl = ShareUrls.firstUrl(shareLink);
     if (extractedUrl.isPresent() && !isTrustedShareUrl(extractedUrl.get())) {
       throw new IllegalArgumentException("Unsupported share link host");
     }
     String rawUrl = extractedUrl.orElse(shareLink.trim());
     String resolvedUrl = resolveFinalUrl(rawUrl, normalizedCookie);
-    if (extractFirstUrl(resolvedUrl).isPresent() && !isTrustedShareUrl(resolvedUrl)) {
+    if (ShareUrls.firstUrl(resolvedUrl).isPresent() && !isTrustedShareUrl(resolvedUrl)) {
       throw new IllegalArgumentException("Unsupported resolved share link host");
     }
     return new ResolvedShareLink(normalizedCookie, resolvedUrl);
   }
 
-  private List<AwemeProfile> collectAwemeProfileList(
-      List<JsonNode> awemeList, String scope, DownloadProgressCallback progressCallback)
+  private List<AwemeProfile> collectAwemeProfileList(List<JsonNode> awemeList)
       throws DouyinDownloaderException {
-    int total = awemeList.size();
-    notifyProgress(progressCallback, new DownloadProgress(scope, 0, total, "", true, "started"));
-
-    if (awemeList.isEmpty()) {
-      return Collections.emptyList();
-    }
-
     List<AwemeProfile> results = new ArrayList<>(awemeList.size());
-    for (int i = 0; i < awemeList.size(); i++) {
-      JsonNode aweme = awemeList.get(i);
+    for (JsonNode aweme : awemeList) {
       String awemeId = aweme.path("aweme_id").asText("").trim();
-      int completed = i + 1;
-      try {
-        AwemeProfile profile = collectAwemeProfileFromNode(aweme, awemeId);
-        results.add(profile);
-        notifyProgress(
-            progressCallback,
-            new DownloadProgress(scope, completed, total, profile.awemeId(), true, "completed"));
-      } catch (DouyinDownloaderException e) {
-        notifyProgress(
-            progressCallback,
-            new DownloadProgress(scope, completed, total, awemeId, false, e.getMessage()));
-        throw e;
-      }
+      results.add(collectAwemeProfileFromNode(aweme, awemeId));
     }
     return Collections.unmodifiableList(results);
   }
@@ -331,7 +210,7 @@ public final class DouyinDownloader {
       awemeId = fallbackAwemeId == null ? "" : fallbackAwemeId.trim();
     }
     if (awemeId.isEmpty()) {
-      throw new FileDownloadException("aweme_id is missing in aweme payload");
+      throw new AwemeDetailFetchException("aweme_id is missing in aweme payload");
     }
 
     MediaType mediaType = isImagePost(aweme) ? MediaType.IMAGE : MediaType.VIDEO;
@@ -1271,7 +1150,7 @@ public final class DouyinDownloader {
       return "";
     }
     try {
-      return URLDecoder.decode(value, StandardCharsets.UTF_8);
+      return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
     } catch (Exception ignored) {
       return value;
     }
@@ -1289,18 +1168,6 @@ public final class DouyinDownloader {
     }
     String text = hasMoreNode.asText("").trim();
     return "1".equals(text) || "true".equalsIgnoreCase(text);
-  }
-
-  private void notifyProgress(
-      DownloadProgressCallback progressCallback, DownloadProgress progress) {
-    if (progressCallback == null) {
-      return;
-    }
-    try {
-      progressCallback.onProgress(progress);
-    } catch (RuntimeException ignored) {
-      // Ignore callback exception to avoid interrupting download process.
-    }
   }
 
   private Optional<String> pickLastUrl(JsonNode urlList) {
@@ -1329,9 +1196,7 @@ public final class DouyinDownloader {
 
   private record ResolvedShareLink(String normalizedCookie, String resolvedUrl) {}
 
-  private record WorkListContext(String normalizedCookie, List<JsonNode> awemeList) {}
-
-  private record SingleAwemeContext(String normalizedCookie, String awemeId, JsonNode aweme) {}
+  private record SingleAwemeContext(String awemeId, JsonNode aweme) {}
 
   private record ImageAsset(String thumbnailUrl, String downloadUrl, MediaType mediaType) {}
 

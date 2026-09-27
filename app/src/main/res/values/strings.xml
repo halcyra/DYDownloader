@@ -103,4 +103,5 @@
         <item quantity="one">%1$d selected item has already been downloaded. Download the selection again?</item>
         <item quantity="other">%1$d selected items have already been downloaded. Download the selection again?</item>
     </plurals>
+    <string name="download_storage_permission_required">Allow storage access to save files in Downloads.</string>
 </resources>

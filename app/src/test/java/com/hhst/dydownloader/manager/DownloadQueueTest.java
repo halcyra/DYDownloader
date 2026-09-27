@@ -11,7 +11,6 @@ import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
@@ -29,7 +28,7 @@ public class DownloadQueueTest {
     try {
       clearTasks();
       currentTasks().add(removed);
-      DownloadQueue.removeTask(removed);
+      DownloadQueue.removeTasksForResource(removed.getResourceItem());
       currentTasks().add(replacement);
       try {
         DownloadQueue.completeTask(removed, saved::incrementAndGet);
@@ -53,7 +52,9 @@ public class DownloadQueueTest {
       clearTasks();
       currentTasks().addAll(List.of(leaf, root, other));
       DownloadQueue.removeTasksForResource(leaf.getResourceItem());
-      assertEquals(Set.of(root.getResourceKey(), other.getResourceKey()), DownloadQueue.getQueuedKeys());
+      assertEquals(Set.of(root.getResourceKey(), other.getResourceKey()),
+          DownloadQueue.getTasks().stream().map(DownloadTask::getResourceKey)
+              .collect(java.util.stream.Collectors.toSet()));
     } finally {
       clearTasks();
     }
@@ -72,23 +73,6 @@ public class DownloadQueueTest {
     } finally {
       clearTasks();
     }
-  }
-
-  @Test
-  public void collectKeysByStatuses_excludesFailedTasksFromQueuedKeys() {
-    DownloadTask queued = task(Platform.DOUYIN, "aweme-a#photo:1", DownloadTask.Status.QUEUED);
-    DownloadTask downloading =
-        task(Platform.DOUYIN, "aweme-b#video", DownloadTask.Status.DOWNLOADING);
-    DownloadTask failed = task(Platform.DOUYIN, "aweme-c#photo:1", DownloadTask.Status.FAILED);
-    DownloadTask completed =
-        task(Platform.DOUYIN, "aweme-d#video", DownloadTask.Status.COMPLETED);
-
-    Set<String> keys =
-        DownloadQueue.collectKeysByStatuses(
-            List.of(queued, downloading, failed, completed),
-            EnumSet.of(DownloadTask.Status.QUEUED, DownloadTask.Status.DOWNLOADING));
-
-    assertEquals(Set.of("DOUYIN:aweme-a#photo:1", "DOUYIN:aweme-b#video"), keys);
   }
 
   @Test

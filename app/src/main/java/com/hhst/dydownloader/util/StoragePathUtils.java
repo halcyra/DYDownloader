@@ -8,7 +8,6 @@ import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 
 public final class StoragePathUtils {
-  public static final String PUBLIC_DOWNLOADS_DISPLAY_ROOT = "Download/DYDownloader";
   public static final String PUBLIC_DOWNLOADS_DIRECTORY_NAME = "DYDownloader";
   public static final String DEFAULT_FILE_NAME_TEMPLATE = "{desc}";
   private static final int MAX_SEGMENT_LENGTH = 48;
@@ -58,49 +57,17 @@ public final class StoragePathUtils {
     return String.join("/", normalizedSegments);
   }
 
+  public static String normalizeRelativeDir(String relativeDir) {
+    if (relativeDir == null || relativeDir.isBlank()) return "";
+    return joinSegments(relativeDir.replace('\\', '/').split("/"));
+  }
+
   public static String sanitizeSegment(String raw, String fallback) {
-    String fallbackValue = fallback == null ? "" : fallback.trim();
-    String value = raw == null ? "" : raw.trim();
-    if (value.isEmpty()) {
-      value = fallbackValue;
-    }
-    value =
-        value
-            .replaceAll("[\\\\/:*?\"<>|]", " ")
-            .replaceAll("\\p{Cntrl}", " ")
-            .replaceAll("\\s+", " ")
-            .trim();
-    while (value.startsWith(".")) {
-      value = value.substring(1).trim();
-    }
-    while (value.endsWith(".")) {
-      value = value.substring(0, value.length() - 1).trim();
-    }
-    value = shortenWithHash(value, MAX_SEGMENT_LENGTH);
-    if (value.isEmpty()) {
-      value = fallbackValue;
-    }
-    return value.trim();
+    return shortenWithHash(normalizeName(raw, fallback), MAX_SEGMENT_LENGTH);
   }
 
   public static String sanitizeFileName(String raw, String fallback) {
-    String fallbackValue = fallback == null ? "" : fallback.trim();
-    String value = raw == null ? "" : raw.trim();
-    if (value.isEmpty()) {
-      value = fallbackValue;
-    }
-    value =
-        value
-            .replaceAll("[\\\\/:*?\"<>|]", " ")
-            .replaceAll("\\p{Cntrl}", " ")
-            .replaceAll("\\s+", " ")
-            .trim();
-    while (value.startsWith(".")) {
-      value = value.substring(1).trim();
-    }
-    while (value.endsWith(".")) {
-      value = value.substring(0, value.length() - 1).trim();
-    }
+    String value = normalizeName(raw, fallback);
     int extensionIndex = value.lastIndexOf('.');
     String extension =
         extensionIndex > 0 && extensionIndex < value.length() - 1
@@ -109,19 +76,23 @@ public final class StoragePathUtils {
     String baseName = extension.isEmpty() ? value : value.substring(0, extensionIndex);
     int maxBaseLength = Math.max(12, MAX_FILE_NAME_LENGTH - extension.length());
     baseName = shortenWithHash(baseName, maxBaseLength);
-    String fileName = (baseName + extension).trim();
-    if (fileName.isEmpty()) {
-      fileName = shortenWithHash(fallbackValue, MAX_FILE_NAME_LENGTH);
-    }
-    return fileName;
+    return (baseName + extension).trim();
   }
 
-  public static String buildPublicDownloadDisplayPath(String relativeDir) {
-    String normalized = normalizeRelativePath(relativeDir);
-    if (normalized.isBlank()) {
-      return PUBLIC_DOWNLOADS_DISPLAY_ROOT;
-    }
-    return PUBLIC_DOWNLOADS_DISPLAY_ROOT + "/" + normalized;
+  private static String normalizeName(String raw, String fallback) {
+    String value = cleanName(raw);
+    return value.isEmpty() ? cleanName(fallback) : value;
+  }
+
+  private static String cleanName(String raw) {
+    String value = nullSafe(raw)
+        .replaceAll("[\\\\/:*?\"<>|]", " ")
+        .replaceAll("\\p{Cntrl}", " ")
+        .replaceAll("\\s+", " ")
+        .trim();
+    while (value.startsWith(".")) value = value.substring(1).trim();
+    while (value.endsWith(".")) value = value.substring(0, value.length() - 1).trim();
+    return value;
   }
 
   public static String stableToken(String raw) {
@@ -146,13 +117,5 @@ public final class StoragePathUtils {
     }
     String prefix = normalized.substring(0, prefixLength).trim();
     return prefix.isEmpty() ? suffix.substring(1) : prefix + suffix;
-  }
-
-  private static String normalizeRelativePath(String relativeDir) {
-    if (relativeDir == null || relativeDir.isBlank()) {
-      return "";
-    }
-    String[] parts = relativeDir.replace('\\', '/').split("/");
-    return joinSegments(parts);
   }
 }

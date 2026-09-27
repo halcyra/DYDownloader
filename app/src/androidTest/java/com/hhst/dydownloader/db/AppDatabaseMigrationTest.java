@@ -1,12 +1,16 @@
 package com.hhst.dydownloader.db;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import androidx.room.Room;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import com.hhst.dydownloader.model.CardType;
+import com.hhst.dydownloader.model.Platform;
 import java.io.File;
 import org.junit.After;
 import org.junit.Test;
@@ -57,6 +61,28 @@ public class AppDatabaseMigrationTest {
   @After
   public void tearDown() {
     appContext.deleteDatabase(DATABASE_NAME);
+  }
+
+  @Test
+  public void savedPhotosRetainImageClassificationAndAuthor() {
+    AppDatabase database = Room.inMemoryDatabaseBuilder(appContext, AppDatabase.class).build();
+    try {
+      ResourceEntity photo = new ResourceEntity(Platform.TIKTOK, 0L,
+          CardType.PHOTO.getIconResId(), "Photo", CardType.PHOTO, 1L, 0, true);
+      photo.authorNickname = "Creator";
+      long id = database.resourceDao().insert(photo);
+      var restored = database.resourceDao().getById(id).toResourceItem();
+      assertTrue(restored.imagePost());
+      assertEquals("Creator", restored.authorNickname());
+      assertEquals(Platform.TIKTOK, restored.platform());
+
+      photo.id = id;
+      photo.type = CardType.VIDEO;
+      database.resourceDao().update(photo);
+      assertFalse(database.resourceDao().getById(id).toResourceItem().imagePost());
+    } finally {
+      database.close();
+    }
   }
 
   @Test

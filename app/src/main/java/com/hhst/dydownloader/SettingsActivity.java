@@ -9,9 +9,12 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 import com.hhst.dydownloader.model.Platform;
-import org.apache.commons.io.FileUtils;
+import com.hhst.dydownloader.util.CacheFiles;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class SettingsActivity extends AppCompatActivity {
+  private final ExecutorService cacheExecutor = Executors.newSingleThreadExecutor();
   private TextView currentLanguage, cacheText, cookieStatus, downloadSubdirectoriesSummary,
       fileNamingSummary;
   private MaterialSwitch downloadSubdirectoriesSwitch;
@@ -32,12 +35,7 @@ public class SettingsActivity extends AppCompatActivity {
           var systemBars =
               insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
           v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
-          toolbar.setPadding(
-              0,
-              systemBars.top,
-              0,
-              0); // MaterialToolbar will handle internal padding if its height is wrap_content or
-          // minHeight is set
+          toolbar.setPadding(0, systemBars.top, 0, 0);
           return insets;
         });
 
@@ -47,10 +45,6 @@ public class SettingsActivity extends AppCompatActivity {
     downloadSubdirectoriesSummary = findViewById(R.id.downloadSubdirectoriesSummary);
     downloadSubdirectoriesSwitch = findViewById(R.id.downloadSubdirectoriesSwitch);
     fileNamingSummary = findViewById(R.id.fileNamingSummary);
-    updateCurrentLanguage();
-    updateCookieStatus();
-    updateDownloadSubdirectorySetting();
-    updateFileNameTemplate();
 
     findViewById(R.id.layoutLanguage).setOnClickListener(v -> showLanguageDialog());
     findViewById(R.id.layoutDownloadSubdirectories)
@@ -73,8 +67,6 @@ public class SettingsActivity extends AppCompatActivity {
               Intent intent = new Intent(this, CookiesActivity.class);
               startActivity(intent);
             });
-
-    updateCacheSize();
   }
 
   @Override
@@ -84,6 +76,13 @@ public class SettingsActivity extends AppCompatActivity {
     updateCookieStatus();
     updateDownloadSubdirectorySetting();
     updateFileNameTemplate();
+    updateCacheSize();
+  }
+
+  @Override
+  protected void onDestroy() {
+    cacheExecutor.shutdownNow();
+    super.onDestroy();
   }
 
   private void showFileNameTemplateDialog() {
@@ -152,16 +151,26 @@ public class SettingsActivity extends AppCompatActivity {
         .setPositiveButton(
             R.string.clear,
             (dialog, which) -> {
-              FileUtils.deleteQuietly(getCacheDir());
-              updateCacheSize();
+              cacheExecutor.execute(() -> {
+                CacheFiles.clear(getCacheDir());
+                postCacheSize(CacheFiles.size(getCacheDir()));
+              });
             })
         .setNegativeButton(R.string.dialog_cancel, null)
         .show();
   }
 
   private void updateCacheSize() {
-    long size = FileUtils.sizeOfDirectory(getCacheDir());
+    cacheExecutor.execute(() -> postCacheSize(CacheFiles.size(getCacheDir())));
+  }
 
+  private void postCacheSize(long size) {
+    runOnUiThread(() -> {
+      if (!isDestroyed()) showCacheSize(size);
+    });
+  }
+
+  private void showCacheSize(long size) {
     if (size < 1024) {
       cacheText.setText(getString(R.string.cache_size_bytes, size));
     } else if (size < 1048576) {

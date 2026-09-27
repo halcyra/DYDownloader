@@ -175,12 +175,6 @@ public class MainActivity extends AppCompatActivity {
       mainHandler.removeCallbacks(clearExitPendingRunnable);
       clearExitPendingRunnable = null;
     }
-    if (isFinishing()) {
-      try {
-        com.hhst.dydownloader.manager.DownloadManager.getInstance().shutdown();
-      } catch (IllegalStateException ignored) {
-      }
-    }
   }
 
   private void showClipboardPrompt() {

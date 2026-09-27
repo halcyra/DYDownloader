@@ -19,10 +19,6 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
     compileOptions {
@@ -33,6 +29,7 @@ android {
         viewBinding = true
     }
     lint {
+        // Picasso bundles notification support; this app only uses its image views.
         disable += "NotificationPermission"
         disable += "AndroidGradlePluginVersion"
         disable += "GradleDependency"
@@ -47,13 +44,11 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.constraintlayout)
     implementation(libs.viewpager2)
-    implementation(libs.commons.io)
     implementation(libs.okhttp)
     implementation(libs.jackson.databind)
     implementation(libs.jackson.annotations)
     implementation(libs.jackson.core)
     implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
     implementation(libs.picasso)
     implementation(libs.photoview)
     annotationProcessor(libs.room.compiler)

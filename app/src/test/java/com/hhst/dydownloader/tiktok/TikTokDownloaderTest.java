@@ -16,12 +16,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.Test;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import org.junit.Test;
 
 public class TikTokDownloaderTest {
   private static final String WORK_ITEM_ID = "7345678901234567890";
@@ -35,12 +35,6 @@ public class TikTokDownloaderTest {
         TikTokDownloader.isTrustedShareUrl(
             "https://www.tiktok.com/@user/video/7345678901234567890"));
     assertFalse(TikTokDownloader.isTrustedShareUrl("https://example.com/video/7345678901234567890"));
-  }
-
-  @Test
-  public void containsTikTokLink_detectsShareText() {
-    assertTrue(TikTokDownloader.containsTikTokLink("watch https://vm.tiktok.com/ZM1234567/ now"));
-    assertFalse(TikTokDownloader.containsTikTokLink("https://example.com/not-tiktok"));
   }
 
   @Test

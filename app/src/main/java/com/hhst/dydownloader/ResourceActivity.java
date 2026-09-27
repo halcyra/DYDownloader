@@ -39,8 +39,7 @@ public class ResourceActivity extends AppCompatActivity {
           var systemBars =
               insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
           v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
-          appBarLayout.setPadding(
-              0, systemBars.top, 0, 0); // Apply padding to AppBarLayout container
+          appBarLayout.setPadding(0, systemBars.top, 0, 0);
           return insets;
         });
 

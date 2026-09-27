@@ -1,9 +1,8 @@
 package com.hhst.dydownloader.cookies;
 
 import com.hhst.dydownloader.model.Platform;
-import java.net.URI;
+import com.hhst.dydownloader.util.HostAllowList;
 import java.util.List;
-import java.util.Locale;
 
 public record CookiePlatformConfig(
     Platform platform,
@@ -42,25 +41,6 @@ public record CookiePlatformConfig(
   }
 
   public boolean isTrustedWebUrl(String url) {
-    if (url == null || url.isBlank()) {
-      return false;
-    }
-    try {
-      String host = URI.create(url).getHost();
-      if (host == null || host.isBlank()) {
-        return false;
-      }
-      String normalizedHost = host.toLowerCase(Locale.ROOT);
-      for (String suffix : trustedHostSuffixes) {
-        String normalizedSuffix = suffix.toLowerCase(Locale.ROOT);
-        if (normalizedHost.equals(normalizedSuffix)
-            || normalizedHost.endsWith("." + normalizedSuffix)) {
-          return true;
-        }
-      }
-      return false;
-    } catch (IllegalArgumentException ignored) {
-      return false;
-    }
+    return HostAllowList.matches(url, trustedHostSuffixes);
   }
 }

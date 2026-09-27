@@ -157,9 +157,7 @@ final class ABogusGenerator {
     return CustomBase64.encode(result, ALPHABET_S4);
   }
 
-  // ------------------------------------------------------------------
   // 字段布局
-  // ------------------------------------------------------------------
 
   private int[] buildFields(String query, long nowMs) {
     int[] fields = new int[FIELD_ORDER.length];
@@ -256,9 +254,7 @@ final class ABogusGenerator {
     return fallback;
   }
 
-  // ------------------------------------------------------------------
   // 摘要与编码
-  // ------------------------------------------------------------------
 
   private static int[] digestOf(String text) {
     // SM3(SM3(text + SALT))：内层摘要按原始字节参与外层哈希
@@ -396,9 +392,7 @@ final class ABogusGenerator {
     return out;
   }
 
-  // ------------------------------------------------------------------
   // SM3（标准实现，与上游 src/encrypt/sm3.py 一致）
-  // ------------------------------------------------------------------
 
   private static final int[] SM3_IV = {
     0x7380166F, 0x4914B2B9, 0x172442D7, 0xDA8A0600,

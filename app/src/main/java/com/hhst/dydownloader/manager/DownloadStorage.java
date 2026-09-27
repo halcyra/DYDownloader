@@ -39,7 +39,7 @@ final class DownloadStorage {
       throw new IOException("Source file missing");
     }
     String safeName = StoragePathUtils.sanitizeFileName(fileName, sourceFile.getName());
-    String safeRelativeDir = normalizeRelativeDir(relativeDir);
+    String safeRelativeDir = StoragePathUtils.normalizeRelativeDir(relativeDir);
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         return storeInMediaStore(sourceFile, safeRelativeDir, safeName, mimeType);
@@ -150,14 +150,6 @@ final class DownloadStorage {
         + "/"
         + relativeDir
         + "/";
-  }
-
-  private String normalizeRelativeDir(String relativeDir) {
-    if (relativeDir == null || relativeDir.isBlank()) {
-      return "";
-    }
-    String[] parts = relativeDir.replace('\\', '/').split("/");
-    return StoragePathUtils.joinSegments(parts);
   }
 
   private void copy(InputStream input, OutputStream output) throws IOException {

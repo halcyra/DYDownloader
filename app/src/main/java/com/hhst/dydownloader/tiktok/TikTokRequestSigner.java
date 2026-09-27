@@ -1,9 +1,10 @@
 package com.hhst.dydownloader.tiktok;
 
+import static com.hhst.dydownloader.util.SignatureDigest.md5Hex;
+
 import com.hhst.dydownloader.util.CustomBase64;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -166,9 +167,7 @@ public final class TikTokRequestSigner {
     return sealedQuery + "&" + BOGUS_PARAM + "=" + BOGUS_VALUE + "&" + GNARLY_PARAM + "=" + gnarly;
   }
 
-  // ------------------------------------------------------------------
   // TikTok 浏览器序列化规则
-  // ------------------------------------------------------------------
 
   /** TikTok 的浏览器序列化不是 application/x-www-form-urlencoded：空格为 %20，括号、斜杠、冒号保持原样。 */
   private static String encodeQuery(List<String[]> pairs) {
@@ -223,9 +222,7 @@ public final class TikTokRequestSigner {
     builder.append(Character.toUpperCase(Character.forDigit(value & 0xF, 16)));
   }
 
-  // ------------------------------------------------------------------
   // 载荷构造
-  // ------------------------------------------------------------------
 
   /** SDK 的 FNV-1a 变体：常规轮之后乘 33。 */
   static long hashState(String text) {
@@ -323,9 +320,7 @@ public final class TikTokRequestSigner {
     return accumulator & MASK32;
   }
 
-  // ------------------------------------------------------------------
   // ChaCha 变体
-  // ------------------------------------------------------------------
 
   private static void quarterRound(int[] state, int a, int b, int c, int d) {
     state[a] += state[b];
@@ -460,9 +455,7 @@ public final class TikTokRequestSigner {
     return (System.currentTimeMillis() * 1000L) & MASK32;
   }
 
-  // ------------------------------------------------------------------
   // 载荷
-  // ------------------------------------------------------------------
 
   /**
    * 环境报告：25 个 TLV 字段，键 0x20..0x38 升序。
@@ -564,19 +557,5 @@ public final class TikTokRequestSigner {
 
   private static byte[] utf8(String text) {
     return text.getBytes(StandardCharsets.UTF_8);
-  }
-
-  private static String md5Hex(byte[] input) {
-    try {
-      byte[] digest = MessageDigest.getInstance("MD5").digest(input);
-      StringBuilder builder = new StringBuilder(digest.length * 2);
-      for (byte value : digest) {
-        builder.append(Character.forDigit((value >> 4) & 0xF, 16));
-        builder.append(Character.forDigit(value & 0xF, 16));
-      }
-      return builder.toString();
-    } catch (Exception e) {
-      throw new IllegalStateException("MD5 unavailable", e);
-    }
   }
 }

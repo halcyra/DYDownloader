@@ -1,8 +1,7 @@
 package com.hhst.dydownloader.downloader;
 
-import java.net.URI;
+import com.hhst.dydownloader.util.HostAllowList;
 import java.util.List;
-import java.util.Locale;
 
 public record PlatformRequestContext(
     String userAgent, String referer, String cookie, List<String> cookieHostSuffixes) {
@@ -15,28 +14,6 @@ public record PlatformRequestContext(
   }
 
   public boolean shouldAttachCookie(String url) {
-    if (cookie.isBlank() || url == null || url.isBlank()) {
-      return false;
-    }
-    try {
-      String host = URI.create(url.trim()).getHost();
-      if (host == null || host.isBlank()) {
-        return false;
-      }
-      String normalizedHost = host.toLowerCase(Locale.ROOT);
-      for (String suffix : cookieHostSuffixes) {
-        if (suffix == null || suffix.isBlank()) {
-          continue;
-        }
-        String normalizedSuffix = suffix.toLowerCase(Locale.ROOT);
-        if (normalizedHost.equals(normalizedSuffix)
-            || normalizedHost.endsWith("." + normalizedSuffix)) {
-          return true;
-        }
-      }
-      return false;
-    } catch (Exception ignored) {
-      return false;
-    }
+    return !cookie.isBlank() && HostAllowList.matches(url, cookieHostSuffixes);
   }
 }

@@ -32,4 +32,8 @@ public final class ResourceScreenStore {
     ArrayList<ResourceItem> items = SCREENS.get(screenKey);
     return items == null ? new ArrayList<>() : new ArrayList<>(items);
   }
+
+  public static void remove(String screenKey) {
+    if (screenKey != null) SCREENS.remove(screenKey);
+  }
 }

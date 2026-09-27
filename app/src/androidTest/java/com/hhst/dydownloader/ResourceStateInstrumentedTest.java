@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.os.Bundle;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -12,11 +13,40 @@ import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public class ResourceStateInstrumentedTest {
+  @Test
+  public void recreationKeepsResourcesAndFinishReleasesScreenCache() {
+    AtomicReference<String> screenKey = new AtomicReference<>();
+    AtomicReference<File> snapshot = new AtomicReference<>();
+    try (ActivityScenario<ResourceActivity> scenario = ActivityScenario.launch(ResourceActivity.class)) {
+      scenario.onActivity(activity -> {
+        ResourceFragment fragment = ResourceFragment.newInstance(
+            List.of(item("photo", CardType.PHOTO)), "Review", ResourceActivity.REFERRER_RESOURCE, null);
+        activity.getSupportFragmentManager().beginTransaction()
+            .replace(R.id.fragment_container, fragment).commitNow();
+        Bundle state = new Bundle();
+        fragment.onSaveInstanceState(state);
+        screenKey.set(state.getString("state_screen_key"));
+        snapshot.set(new File(new File(activity.getCacheDir(), "resource-screen-snapshots"),
+            state.getString("state_resource_snapshot") + ".json"));
+        assertFalse(ResourceScreenStore.get(screenKey.get()).isEmpty());
+      });
+      scenario.recreate();
+      scenario.onActivity(activity -> {
+        RecyclerView list = activity.findViewById(R.id.recyclerView);
+        assertEquals(1, list.getAdapter().getItemCount());
+        assertTrue(snapshot.get().isFile());
+      });
+    }
+    assertTrue(ResourceScreenStore.get(screenKey.get()).isEmpty());
+    assertFalse(snapshot.get().exists());
+  }
+
   @Test
   public void filteringKeepsSelectionCountsAndPersistedSnapshotConsistent() {
     ResourceItem photo = item("photo", CardType.PHOTO);

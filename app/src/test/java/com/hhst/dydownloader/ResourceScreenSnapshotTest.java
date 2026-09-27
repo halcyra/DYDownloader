@@ -19,6 +19,21 @@ import org.junit.Test;
 public class ResourceScreenSnapshotTest {
 
   @Test
+  public void snapshotCleanupStaysInsideItsDirectory() throws Exception {
+    File root = Files.createTempDirectory("dy-snapshot-cleanup").toFile();
+    File directory = new File(root, "snapshots");
+    assertTrue(directory.mkdir());
+    File outside = new File(root, "outside.json");
+    Files.write(outside.toPath(), "keep".getBytes(StandardCharsets.UTF_8));
+    File inside = new File(directory, "screen.json");
+    Files.write(inside.toPath(), "[]".getBytes(StandardCharsets.UTF_8));
+    ResourceScreenSnapshot.delete(directory, "../outside");
+    assertTrue(outside.isFile());
+    ResourceScreenSnapshot.delete(directory, "screen");
+    assertFalse(inside.exists());
+  }
+
+  @Test
   public void snapshot_rejectsIncompleteLegacyAndroidRecords() throws Exception {
     assertTrue(restore(null, "[{\"leaf\":true}]").isEmpty());
   }

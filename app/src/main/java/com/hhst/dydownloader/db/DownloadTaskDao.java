@@ -16,7 +16,4 @@ public interface DownloadTaskDao {
 
   @Query("DELETE FROM download_tasks WHERE taskKey = :taskKey")
   void deleteByKey(String taskKey);
-
-  @Query("DELETE FROM download_tasks")
-  void deleteAll();
 }

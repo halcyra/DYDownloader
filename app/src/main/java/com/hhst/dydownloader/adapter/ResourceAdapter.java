@@ -117,11 +117,11 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
       holder.resourceText.setVisibility(View.GONE);
     }
 
-    holder.itemView.setOnClickListener(v -> listener.onResourceClick(item, position));
-    holder.itemView.setOnLongClickListener(
+    holder.itemView.setOnClickListener(
         v -> {
-          listener.onResourceLongClick(item, position);
-          return true;
+          if (holder.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
+            listener.onResourceClick(item);
+          }
         });
 
     if (!isFromReferrer) {
@@ -160,10 +160,11 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
           isSelected ? R.drawable.bg_check_container_selected : R.drawable.bg_check_container);
       holder.checkContainer.setOnClickListener(
           v -> {
-            if (isQueued) {
+            int currentPosition = holder.getBindingAdapterPosition();
+            if (currentPosition == RecyclerView.NO_POSITION) {
               return;
             }
-            listener.onResourceSelectToggle(item, position);
+            listener.onResourceSelectToggle(resourceList.get(currentPosition), currentPosition);
           });
     } else holder.checkContainer.setVisibility(View.GONE);
   }
@@ -178,9 +179,7 @@ public class ResourceAdapter extends RecyclerView.Adapter<ResourceAdapter.Resour
   }
 
   public interface OnResourceClickListener {
-    void onResourceClick(ResourceItem item, int position);
-
-    void onResourceLongClick(ResourceItem item, int position);
+    void onResourceClick(ResourceItem item);
 
     void onResourceSelectToggle(ResourceItem item, int position);
   }

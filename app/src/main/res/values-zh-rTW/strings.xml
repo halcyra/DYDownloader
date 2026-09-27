@@ -101,4 +101,5 @@
     <plurals name="resource_download_again_message">
         <item quantity="other">所選內容中有 %1$d 項已下載，是否再次下載所選內容？</item>
     </plurals>
+    <string name="download_storage_permission_required">請允許儲存權限，以將檔案儲存至下載目錄。</string>
 </resources>

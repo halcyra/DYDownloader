@@ -8,6 +8,8 @@ import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.tiktok.exception.TikTokDetailFetchException;
 import com.hhst.dydownloader.tiktok.exception.TikTokDownloaderException;
 import com.hhst.dydownloader.tiktok.exception.TikTokWorkListFetchException;
+import com.hhst.dydownloader.util.HostAllowList;
+import com.hhst.dydownloader.util.ShareUrls;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -22,24 +24,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public final class TikTokDownloader {
-  public static final Pattern URL_PATTERN =
-      Pattern.compile(
-          "(https?://[^\\s\"<>^`{|}\\uFF0C\\u3002\\uFF1B\\uFF01\\uFF1F\\u3001\\u3010\\u3011\\u300A\\u300B]+)");
   private static final String DETAIL_API = "https://www.tiktok.com/api/item/detail/";
   private static final String ACCOUNT_LIST_API = "https://www.tiktok.com/api/post/item_list/";
   private static final String COLLECTION_LIST_API = "https://www.tiktok.com/api/mix/item_list/";
   private static final int DEFAULT_MAX_PAGES = 200;
   private static final int ACCOUNT_PAGE_SIZE = 16;
   private static final int COLLECTION_PAGE_SIZE = 30;
-  private static final String[] TRUSTED_SHARE_HOSTS = {"tiktok.com"};
+  private static final List<String> TRUSTED_SHARE_HOSTS = List.of("tiktok.com");
   // 必须与签名使用的 UA 一致（X-Dynosaur 0x30 字段对 User-Agent 做指纹绑定）
   private static final String DEFAULT_USER_AGENT =
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -68,12 +65,8 @@ public final class TikTokDownloader {
     this.defaultCookie = normalizeCookie(cookie);
   }
 
-  public static boolean containsTikTokLink(String text) {
-    return extractSupportedShareUrl(text).isPresent();
-  }
-
   public static boolean isTrustedShareUrl(String url) {
-    return isHostInAllowList(url, TRUSTED_SHARE_HOSTS);
+    return HostAllowList.matches(url, TRUSTED_SHARE_HOSTS);
   }
 
   public static boolean isAccountLink(String text) {
@@ -106,44 +99,6 @@ public final class TikTokDownloader {
         .readTimeout(12, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
         .build();
-  }
-
-  private static Optional<String> extractSupportedShareUrl(String text) {
-    Optional<String> firstUrl = extractFirstUrl(text);
-    if (firstUrl.isEmpty()) {
-      return Optional.empty();
-    }
-    return isTrustedShareUrl(firstUrl.get()) ? firstUrl : Optional.empty();
-  }
-
-  private static Optional<String> extractFirstUrl(String text) {
-    if (text == null || text.trim().isEmpty()) {
-      return Optional.empty();
-    }
-    Matcher matcher = URL_PATTERN.matcher(text);
-    return matcher.find() ? Optional.ofNullable(matcher.group(1)) : Optional.empty();
-  }
-
-  private static boolean isHostInAllowList(String url, String[] allowList) {
-    if (url == null || url.isBlank()) {
-      return false;
-    }
-    try {
-      URI uri = URI.create(url.trim());
-      String host = uri.getHost();
-      if (host == null || host.isBlank()) {
-        return false;
-      }
-      String normalizedHost = host.toLowerCase(Locale.ROOT);
-      for (String allowedHost : allowList) {
-        if (normalizedHost.equals(allowedHost) || normalizedHost.endsWith("." + allowedHost)) {
-          return true;
-        }
-      }
-      return false;
-    } catch (Exception ignored) {
-      return false;
-    }
   }
 
   @SafeVarargs
@@ -214,13 +169,13 @@ public final class TikTokDownloader {
 
   private ResolvedShareLink resolveShareLink(String shareLink, String cookie) {
     String normalizedCookie = normalizeCookie(cookie);
-    Optional<String> extractedUrl = extractFirstUrl(shareLink);
+    Optional<String> extractedUrl = ShareUrls.firstUrl(shareLink);
     if (extractedUrl.isPresent() && !isTrustedShareUrl(extractedUrl.get())) {
       throw new IllegalArgumentException("Unsupported share link host");
     }
     String rawUrl = extractedUrl.orElse(shareLink.trim());
     String resolvedUrl = resolveFinalUrl(rawUrl, normalizedCookie);
-    if (extractFirstUrl(resolvedUrl).isPresent() && !isTrustedShareUrl(resolvedUrl)) {
+    if (ShareUrls.firstUrl(resolvedUrl).isPresent() && !isTrustedShareUrl(resolvedUrl)) {
       throw new IllegalArgumentException("Unsupported resolved share link host");
     }
     return new ResolvedShareLink(normalizedCookie, resolvedUrl);

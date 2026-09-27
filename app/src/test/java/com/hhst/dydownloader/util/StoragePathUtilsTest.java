@@ -7,6 +7,20 @@ import org.junit.Test;
 
 public class StoragePathUtilsTest {
   @Test
+  public void normalizeRelativeDirHandlesMixedSeparatorsAndTraversalSegments() {
+    assertEquals("Creator/Sub/bad name",
+        StoragePathUtils.normalizeRelativeDir("/../Creator /..//Sub\\bad:name"));
+    assertEquals("", StoragePathUtils.normalizeRelativeDir(null));
+  }
+
+  @Test
+  public void sanitizeNamesAlsoCleansFallbacks() {
+    assertEquals("fallback name", StoragePathUtils.sanitizeSegment("...", "../fallback/name"));
+    assertEquals("fallback name.jpg", StoragePathUtils.sanitizeFileName("...", "../fallback/name.jpg"));
+    assertEquals("", StoragePathUtils.sanitizeSegment("...", ".."));
+  }
+
+  @Test
   public void expandFileNameTemplate_doesNotExpandPlaceholdersInsideMetadata() {
     assertEquals(
         "A{desc}_Price $5 {id}_123",
@@ -35,19 +49,6 @@ public class StoragePathUtilsTest {
 
     assertTrue(sanitized.length() <= 96);
     assertTrue(sanitized.endsWith(".jpg"));
-  }
-
-  @Test
-  public void buildPublicDownloadDisplayPath_joinsRelativeDirectory() {
-    String displayPath =
-        StoragePathUtils.buildPublicDownloadDisplayPath("Creator Name/Work Title");
-
-    assertEquals("Download/DYDownloader/Creator Name/Work Title", displayPath);
-  }
-
-  @Test
-  public void buildPublicDownloadDisplayPath_usesUnifiedRootForBlankRelativeDirectory() {
-    assertEquals("Download/DYDownloader", StoragePathUtils.buildPublicDownloadDisplayPath(""));
   }
 
   @Test

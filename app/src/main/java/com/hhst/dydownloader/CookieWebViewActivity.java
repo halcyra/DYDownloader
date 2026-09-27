@@ -178,7 +178,6 @@ public class CookieWebViewActivity extends AppCompatActivity {
           return true;
         }
       } catch (java.net.URISyntaxException ignoredAgain) {
-        // Ignore and fall through.
       }
       return false;
     }

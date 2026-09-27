@@ -1,7 +1,7 @@
 package com.hhst.dydownloader;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.hhst.dydownloader.db.ResourceDao;
@@ -109,7 +109,7 @@ public class ResourceActionsTest {
 
     assertTrue(ResourceActions.deleteResourceItem(dao, missingLeaf, false));
     assertTrue(dao.getById(root.id) != null);
-    assertTrue(dao.getBySourceKey(root.sourceKey) != null);
+    assertTrue(dao.getBySourceKey(root.platform, root.sourceKey) != null);
   }
 
   @Test
@@ -258,11 +258,6 @@ public class ResourceActionsTest {
     }
 
     @Override
-    public ResourceEntity getByParentIdAndText(long parentId, String text) {
-      throw unsupported();
-    }
-
-    @Override
     public ResourceEntity getById(long id) {
       return entitiesById.get(id);
     }
@@ -286,28 +281,13 @@ public class ResourceActionsTest {
     }
 
     @Override
-    public List<ResourceEntity> getAll() {
-      return List.copyOf(entitiesById.values());
-    }
-
-    @Override
     public long insert(ResourceEntity resource) {
-      throw unsupported();
-    }
-
-    @Override
-    public void insertAll(List<ResourceEntity> resources) {
       throw unsupported();
     }
 
     @Override
     public void update(ResourceEntity resource) {
       put(resource);
-    }
-
-    @Override
-    public void delete(ResourceEntity resource) {
-      throw unsupported();
     }
 
     @Override
@@ -328,12 +308,6 @@ public class ResourceActionsTest {
             }
             return shouldRemove;
           });
-    }
-
-    @Override
-    public void deleteAll() {
-      entitiesById.clear();
-      entitiesBySourceKey.clear();
     }
 
     private UnsupportedOperationException unsupported() {
