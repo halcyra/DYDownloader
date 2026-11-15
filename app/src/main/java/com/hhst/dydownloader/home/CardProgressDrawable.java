@@ -12,10 +12,6 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-/**
- * 卡片四周的进度描边：0 为全暗，100 整圈点亮，其余按周长比例从左上角顺时针点亮。
- * 失败态用错误色整圈显示。
- */
 public class CardProgressDrawable extends Drawable {
 
   private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);

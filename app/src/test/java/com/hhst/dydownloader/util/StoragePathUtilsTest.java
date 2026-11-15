@@ -3,6 +3,7 @@ package com.hhst.dydownloader.util;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 
 public class StoragePathUtilsTest {
@@ -49,6 +50,65 @@ public class StoragePathUtilsTest {
 
     assertTrue(sanitized.length() <= 96);
     assertTrue(sanitized.endsWith(".jpg"));
+  }
+
+  @Test
+  public void sanitizeSegment_doesNotSplitEmojiAtTruncationBoundary() {
+    String prefix = "中".repeat(38);
+    String title = prefix + "\uD83C\uDDF3\uD83C\uDDFF" + "山水".repeat(10);
+
+    String sanitized = StoragePathUtils.sanitizeSegment(title, "Work");
+
+    assertEquals(prefix + "_" + StoragePathUtils.stableToken(title), sanitized);
+    assertTrue(sanitized.length() <= 48);
+    assertTrue(StandardCharsets.UTF_8.newEncoder().canEncode(sanitized));
+  }
+
+  @Test
+  public void sanitizeFileName_doesNotSplitEmojiAndPreservesExtension() {
+    String prefix = "a".repeat(82);
+    String baseName = prefix + "\uD83D\uDE00" + "tail".repeat(8);
+
+    String sanitized = StoragePathUtils.sanitizeFileName(baseName + ".jpg", "fallback.jpg");
+
+    assertEquals(prefix + "_" + StoragePathUtils.stableToken(baseName) + ".jpg", sanitized);
+    assertTrue(sanitized.length() <= 96);
+    assertTrue(StandardCharsets.UTF_8.newEncoder().canEncode(sanitized));
+  }
+
+  @Test
+  public void shortenWithHash_keepsSupplementaryCharactersValidAtEveryBoundary() {
+    String title = "山水\uD83C\uDDF3\uD83C\uDDFF\uD83D\uDE00\uD842\uDFB7".repeat(12);
+
+    for (int limit = 24; limit <= 96; limit++) {
+      String shortened = StoragePathUtils.shortenWithHash(title, limit);
+
+      assertTrue("Invalid Unicode at limit " + limit,
+          StandardCharsets.UTF_8.newEncoder().canEncode(shortened));
+      assertTrue(shortened.length() <= limit);
+      assertTrue(shortened.endsWith("_" + StoragePathUtils.stableToken(title)));
+    }
+  }
+
+  @Test
+  public void sanitizeNames_cleansUnpairedSurrogatesFromMetadataAndFallbacks() {
+    assertEquals("标题 \uD83D\uDE00 结尾",
+        StoragePathUtils.sanitizeSegment("标题\uD83C \uD83D\uDE00 \uDDFF结尾", "fallback"));
+    assertEquals("photo.jpg",
+        StoragePathUtils.sanitizeFileName("photo.jpg\uD83C", "fallback.jpg"));
+    assertEquals("fallback.jpg",
+        StoragePathUtils.sanitizeFileName("\uDDFF", "\uD83Cfallback.jpg\uDDFF"));
+    assertEquals("作者/作品 \uD83D\uDE00",
+        StoragePathUtils.normalizeRelativeDir("作者\uD83C/作品 \uD83D\uDE00\uDDFF"));
+  }
+
+  @Test
+  public void sanitizeNames_preservesCompleteEmojiWithoutShortening() {
+    String title = "\uD83C\uDDF3\uD83C\uDDFF 新西兰 \uD83D\uDE00\uD842\uDFB7";
+
+    assertEquals(title, StoragePathUtils.sanitizeSegment(title, "fallback"));
+    assertEquals(title + ".jpg",
+        StoragePathUtils.sanitizeFileName(title + ".jpg", "fallback.jpg"));
   }
 
   @Test

@@ -24,7 +24,8 @@ public class HttpDownloaderTest {
     OkHttpClient client = new OkHttpClient.Builder()
         .addInterceptor(chain -> response(chain.request(), 200, "image/jpeg", jpegBytes(), null))
         .build();
-    HttpDownloader downloader = new HttpDownloader(client, "", "");
+    HttpDownloader downloader =
+        new HttpDownloader(client, PlatformRequestContexts.forPlatform(Platform.DOUYIN, ""));
     File output = new File(Files.createTempDirectory("cancel-download").toFile(), "image.jpg");
     try {
       downloader.download("https://example.com/image.jpg", output,

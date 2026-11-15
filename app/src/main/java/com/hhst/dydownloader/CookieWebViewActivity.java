@@ -21,7 +21,6 @@ import com.hhst.dydownloader.databinding.ActivityCookieWebviewBinding;
 import com.hhst.dydownloader.model.Platform;
 
 public class CookieWebViewActivity extends AppCompatActivity {
-  public static final String EXTRA_COOKIE = "extra_cookie";
   public static final String EXTRA_PLATFORM = "extra_platform";
   private static final String DESKTOP_UA =
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -140,10 +139,6 @@ public class CookieWebViewActivity extends AppCompatActivity {
         cookie = cookieManager.getCookie(currentUrl);
       }
       AppPrefs.setCookie(this, platform, cookie == null ? "" : cookie);
-      Intent data = new Intent();
-      data.putExtra(EXTRA_COOKIE, cookie == null ? "" : cookie);
-      data.putExtra(EXTRA_PLATFORM, platform.name());
-      setResult(RESULT_OK, data);
     }
   }
 

@@ -1,5 +1,4 @@
 <resources>
-    <string name="app_name">DYDownloader</string>
     <string name="action_filter">篩選</string>
     <string name="action_search">搜尋</string>
     <string name="action_sort">排序</string>
@@ -23,14 +22,11 @@
     <string name="language">語言</string>
     <string name="download_subdirectories">儲存到子目錄</string>
     <string name="download_subdirectories_summary_on">Download/DYDownloader/作品目錄</string>
-    <string name="download_subdirectories_summary_off">Download/DYDownloader</string>
     <string name="file_naming">檔案命名規則</string>
     <string name="file_naming_hint">可用佔位符：{author} 作者、{desc} 描述、{date} 日期、{id} 作品ID</string>
     <string name="file_naming_template_hint">命名範本</string>
     <string name="clear_cache">清除快取</string>
-    <string name="cookies">Cookies</string>
     <string name="cookies_platform_douyin">抖音</string>
-    <string name="cookies_platform_tiktok">TikTok</string>
     <string name="retry">重試</string>
     <string name="dialog_batch_delete_title">批量刪除</string>
     <string name="dialog_detail_title">詳情</string>
@@ -61,10 +57,6 @@
     <string name="download_child_photo">圖片 %1$02d</string>
     <string name="download_child_cover">封面</string>
     <string name="download_child_video">影片</string>
-    <string name="cache_size_initial">0 MB</string>
-    <string name="cache_size_bytes">%1$d B</string>
-    <string name="cache_size_kb">%1$.2f KB</string>
-    <string name="cache_size_mb">%1$.2f MB</string>
     <string name="search_text_hint">搜尋文字</string>
     <string name="sort_newest">時間（最新）</string>
     <string name="sort_oldest">時間（最舊）</string>
@@ -76,7 +68,6 @@
     <string name="play_pause">播放或暫停</string>
     <string name="rewind">快退 5 秒</string>
     <string name="forward">快進 5 秒</string>
-    <string name="time_zero">00:00</string>
     <string name="resource_action_no_local_files">沒有可用的本機檔案</string>
     <string name="resource_action_open_single_only">僅單一本機檔案支援「打開方式」</string>
     <string name="resource_action_no_app_found">未找到可用應用程式</string>

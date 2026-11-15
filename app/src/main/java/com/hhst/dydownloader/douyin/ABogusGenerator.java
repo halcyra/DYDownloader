@@ -157,8 +157,6 @@ final class ABogusGenerator {
     return CustomBase64.encode(result, ALPHABET_S4);
   }
 
-  // 字段布局
-
   private int[] buildFields(String query, long nowMs) {
     int[] fields = new int[FIELD_ORDER.length];
 
@@ -253,8 +251,6 @@ final class ABogusGenerator {
     }
     return fallback;
   }
-
-  // 摘要与编码
 
   private static int[] digestOf(String text) {
     // SM3(SM3(text + SALT))：内层摘要按原始字节参与外层哈希

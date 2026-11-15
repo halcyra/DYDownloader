@@ -8,11 +8,9 @@ import com.hhst.dydownloader.model.CardType;
 import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.model.ResourceItem;
 import java.io.File;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
 
@@ -35,7 +33,7 @@ public class ResourceScreenSnapshotTest {
 
   @Test
   public void snapshot_rejectsIncompleteLegacyAndroidRecords() throws Exception {
-    assertTrue(restore(null, "[{\"leaf\":true}]").isEmpty());
+    assertTrue(ResourceScreenSnapshot.restore(null, "[{\"leaf\":true}]").isEmpty());
   }
 
   @Test
@@ -80,8 +78,8 @@ public class ResourceScreenSnapshotTest {
             "creator/Work");
 
     File snapshotDir = Files.createTempDirectory("dy-resource-snapshot").toFile();
-    String token = persist(snapshotDir, "screen-1", List.of(root));
-    ArrayList<ResourceItem> restored = restore(snapshotDir, token);
+    String token = ResourceScreenSnapshot.persist(snapshotDir, "screen-1", List.of(root));
+    List<ResourceItem> restored = ResourceScreenSnapshot.restore(snapshotDir, token);
 
     assertEquals(1, restored.size());
     assertEquals("screen-1", token);
@@ -95,7 +93,7 @@ public class ResourceScreenSnapshotTest {
   @Test
   public void snapshot_restoreBlankTokenReturnsEmptyList() throws Exception {
     File snapshotDir = Files.createTempDirectory("dy-resource-snapshot-empty").toFile();
-    assertTrue(restore(snapshotDir, "").isEmpty());
+    assertTrue(ResourceScreenSnapshot.restore(snapshotDir, "").isEmpty());
   }
 
   @Test
@@ -114,22 +112,6 @@ public class ResourceScreenSnapshotTest {
     assertFalse(source.contains("java.nio.file.Files"));
     assertFalse(source.contains("Files.write("));
     assertFalse(source.contains("Files.readAllBytes("));
-  }
-
-  private static String persist(File directory, String token, List<ResourceItem> items)
-      throws Exception {
-    Class<?> snapshotClass = Class.forName("com.hhst.dydownloader.ResourceScreenSnapshot");
-    Method method = snapshotClass.getDeclaredMethod("persist", File.class, String.class, List.class);
-    method.setAccessible(true);
-    return (String) method.invoke(null, directory, token, items);
-  }
-
-  @SuppressWarnings("unchecked")
-  private static ArrayList<ResourceItem> restore(File directory, String token) throws Exception {
-    Class<?> snapshotClass = Class.forName("com.hhst.dydownloader.ResourceScreenSnapshot");
-    Method method = snapshotClass.getDeclaredMethod("restore", File.class, String.class);
-    method.setAccessible(true);
-    return (ArrayList<ResourceItem>) method.invoke(null, directory, token);
   }
 
   private static String readSource(String... segments) throws Exception {

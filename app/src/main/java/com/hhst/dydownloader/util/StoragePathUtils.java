@@ -16,10 +16,6 @@ public final class StoragePathUtils {
 
   private StoragePathUtils() {}
 
-  /**
-   * 展开文件名模板，占位符：{author} 作者、{desc} 描述、{date} 日期、{id} 作品 ID。
-   * 未知占位符原样保留；空占位符留下的连续分隔下划线会被折叠。
-   */
   public static String expandFileNameTemplate(
       String template, String author, String desc, String date, String id) {
     String value =
@@ -87,6 +83,8 @@ public final class StoragePathUtils {
   private static String cleanName(String raw) {
     String value = nullSafe(raw)
         .replaceAll("[\\\\/:*?\"<>|]", " ")
+        // Valid surrogate pairs (emoji, supplementary characters) stay intact.
+        .replaceAll("\\p{Cs}", " ")
         .replaceAll("\\p{Cntrl}", " ")
         .replaceAll("\\s+", " ")
         .trim();
@@ -114,6 +112,11 @@ public final class StoragePathUtils {
     int prefixLength = Math.max(12, maxLength - suffix.length());
     if (prefixLength >= normalized.length()) {
       return normalized;
+    }
+    // String indices count UTF-16 code units; never keep only half of a surrogate pair.
+    if (Character.isHighSurrogate(normalized.charAt(prefixLength - 1))
+        && Character.isLowSurrogate(normalized.charAt(prefixLength))) {
+      prefixLength--;
     }
     String prefix = normalized.substring(0, prefixLength).trim();
     return prefix.isEmpty() ? suffix.substring(1) : prefix + suffix;

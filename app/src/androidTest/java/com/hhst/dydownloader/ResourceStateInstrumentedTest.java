@@ -100,7 +100,8 @@ public class ResourceStateInstrumentedTest {
   }
 
   private ResourceItem item(String key, CardType type) {
-    return new ResourceItem(null, 0L, type.getIconResId(), key, type, 1L,
-        0, true, "", null, key, List.of(), type == CardType.PHOTO, "");
+    return new ResourceItem(
+        null, null, 0L, type.getIconResId(), key, "", type, 1L, 0, true, "", null, key, List.of(),
+        type == CardType.PHOTO, "", "");
   }
 }

@@ -23,36 +23,15 @@ public class DownloadAuthorTest {
   public void freshProfileAuthorTakesPriorityWhenAvailable() {
     AwemeProfile profile =
         new AwemeProfile(
-            "7345678901234567890",
-            MediaType.VIDEO,
-            "作品",
-            1L,
-            "新作者",
-            "",
-            "",
-            List.of());
+            Platform.DOUYIN, "7345678901234567890", MediaType.VIDEO, "作品", 1L, "新作者", "", "", "",
+            List.of(), List.of(), List.of());
 
     assertEquals("新作者", DownloadManager.resolveAuthorNickname(profile, item("旧作者")));
   }
 
   private static ResourceItem item(String author) {
     return new ResourceItem(
-        Platform.DOUYIN,
-        null,
-        0L,
-        0,
-        "作品",
-        author,
-        CardType.ALBUM,
-        1L,
-        1,
-        false,
-        "",
-        null,
-        "7345678901234567890",
-        List.of("https://example.com/video.mp4"),
-        false,
-        "",
-        "");
+        Platform.DOUYIN, null, 0L, 0, "作品", author, CardType.ALBUM, 1L, 1, false, "", null,
+        "7345678901234567890", List.of("https://example.com/video.mp4"), false, "", "");
   }
 }

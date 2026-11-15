@@ -27,52 +27,17 @@ public class ResourceActionsTest {
 
     ResourceItem firstChild =
         new ResourceItem(
-            11L,
-            1L,
-            CardType.PHOTO.getIconResId(),
-            "Photo 01",
-            CardType.PHOTO,
-            1L,
-            0,
-            true,
-            "",
-            null,
-            "aweme123#photo:1",
-            List.of(),
-            true,
-            "");
+            null, 11L, 1L, CardType.PHOTO.getIconResId(), "Photo 01", "", CardType.PHOTO, 1L, 0,
+            true, "", null, "aweme123#photo:1", List.of(), true, "", "");
     ResourceItem secondChild =
         new ResourceItem(
-            12L,
-            1L,
-            CardType.VIDEO.getIconResId(),
-            "Live 01",
-            CardType.VIDEO,
-            1L,
-            0,
-            true,
-            "",
-            null,
-            "aweme123#live:1",
-            List.of(),
-            false,
-            "");
+            null, 12L, 1L, CardType.VIDEO.getIconResId(), "Live 01", "", CardType.VIDEO, 1L, 0,
+            true, "", null, "aweme123#live:1", List.of(), false, "", "");
     ResourceItem rootItem =
         new ResourceItem(
-            1L,
-            0L,
-            CardType.ALBUM.getIconResId(),
-            "Work",
-            CardType.ALBUM,
-            1L,
-            2,
-            false,
-            "",
-            List.of(firstChild, secondChild),
-            "aweme123",
-            List.of(),
-            true,
-            existingChildFile.toString());
+            null, 1L, 0L, CardType.ALBUM.getIconResId(), "Work", "", CardType.ALBUM, 1L, 2, false,
+            "", List.of(firstChild, secondChild), "aweme123", List.of(), true,
+            existingChildFile.toString(), "");
 
     InMemoryResourceDao dao = new InMemoryResourceDao();
     dao.put(entity(11L, 1L, "aweme123#photo:1", true, existingChildFile.toString(), CardType.PHOTO));
@@ -89,20 +54,8 @@ public class ResourceActionsTest {
 
     ResourceItem missingLeaf =
         new ResourceItem(
-            null,
-            1L,
-            CardType.PHOTO.getIconResId(),
-            "Photo 01",
-            CardType.PHOTO,
-            1L,
-            0,
-            true,
-            "",
-            null,
-            "aweme123#photo:1",
-            List.of(),
-            true,
-            "");
+            null, null, 1L, CardType.PHOTO.getIconResId(), "Photo 01", "", CardType.PHOTO, 1L, 0,
+            true, "", null, "aweme123#photo:1", List.of(), true, "", "");
 
     InMemoryResourceDao dao = new InMemoryResourceDao();
     dao.put(root);
@@ -127,20 +80,8 @@ public class ResourceActionsTest {
 
     ResourceItem rootItem =
         new ResourceItem(
-            1L,
-            0L,
-            CardType.ALBUM.getIconResId(),
-            "Work",
-            CardType.ALBUM,
-            1L,
-            2,
-            false,
-            "",
-            null,
-            "aweme123",
-            List.of(),
-            false,
-            videoFile.toString());
+            null, 1L, 0L, CardType.ALBUM.getIconResId(), "Work", "", CardType.ALBUM, 1L, 2, false,
+            "", null, "aweme123", List.of(), false, videoFile.toString(), "");
 
     InMemoryResourceDao dao = new InMemoryResourceDao();
     dao.put(root);
@@ -164,21 +105,8 @@ public class ResourceActionsTest {
 
     ResourceItem item =
         new ResourceItem(
-            Platform.TIKTOK,
-            null,
-            0L,
-            CardType.VIDEO.getIconResId(),
-            "TikTok Video",
-            CardType.VIDEO,
-            1L,
-            0,
-            true,
-            "",
-            null,
-            "aweme-tiktok#video",
-            List.of(),
-            false,
-            "");
+            Platform.TIKTOK, null, 0L, CardType.VIDEO.getIconResId(), "TikTok Video", "",
+            CardType.VIDEO, 1L, 0, true, "", null, "aweme-tiktok#video", List.of(), false, "", "");
 
     InMemoryResourceDao dao = new InMemoryResourceDao();
     dao.put(videoEntity);
@@ -232,7 +160,7 @@ public class ResourceActionsTest {
   private static ResourceEntity entity(
       long id, long parentId, String sourceKey, boolean isLeaf, String downloadPath, CardType type) {
     ResourceEntity entity =
-        new ResourceEntity(parentId, type.getIconResId(), sourceKey, type, 1L, 0, isLeaf);
+        new ResourceEntity(Platform.DOUYIN, parentId, type.getIconResId(), sourceKey, type, 1L, 0, isLeaf);
     entity.id = id;
     entity.sourceKey = sourceKey;
     entity.downloadPath = downloadPath;

@@ -22,7 +22,6 @@ import java.util.Random;
 public final class TikTokRequestSigner {
   private static final long MASK32 = 0xFFFFFFFFL;
 
-  // 签名参数，顺序由 SDK 决定
   private static final String DYNOSAUR_PARAM = "X-Dynosaur";
   private static final String MS_TOKEN_PARAM = "msToken";
   private static final String BOGUS_PARAM = "X-Bogus";
@@ -167,8 +166,6 @@ public final class TikTokRequestSigner {
     return sealedQuery + "&" + BOGUS_PARAM + "=" + BOGUS_VALUE + "&" + GNARLY_PARAM + "=" + gnarly;
   }
 
-  // TikTok 浏览器序列化规则
-
   /** TikTok 的浏览器序列化不是 application/x-www-form-urlencoded：空格为 %20，括号、斜杠、冒号保持原样。 */
   private static String encodeQuery(List<String[]> pairs) {
     StringBuilder builder = new StringBuilder();
@@ -221,8 +218,6 @@ public final class TikTokRequestSigner {
     builder.append(Character.toUpperCase(Character.forDigit((value >> 4) & 0xF, 16)));
     builder.append(Character.toUpperCase(Character.forDigit(value & 0xF, 16)));
   }
-
-  // 载荷构造
 
   /** SDK 的 FNV-1a 变体：常规轮之后乘 33。 */
   static long hashState(String text) {
@@ -319,8 +314,6 @@ public final class TikTokRequestSigner {
     }
     return accumulator & MASK32;
   }
-
-  // ChaCha 变体
 
   private static void quarterRound(int[] state, int a, int b, int c, int d) {
     state[a] += state[b];
@@ -454,8 +447,6 @@ public final class TikTokRequestSigner {
   private static long clockNonce() {
     return (System.currentTimeMillis() * 1000L) & MASK32;
   }
-
-  // 载荷
 
   /**
    * 环境报告：25 个 TLV 字段，键 0x20..0x38 升序。

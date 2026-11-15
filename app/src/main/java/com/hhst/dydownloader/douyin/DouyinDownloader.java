@@ -2,9 +2,7 @@ package com.hhst.dydownloader.douyin;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hhst.dydownloader.douyin.exception.AwemeDetailFetchException;
-import com.hhst.dydownloader.douyin.exception.DouyinDownloaderException;
-import com.hhst.dydownloader.douyin.exception.WorkListFetchException;
+import com.hhst.dydownloader.model.Platform;
 import com.hhst.dydownloader.util.HostAllowList;
 import com.hhst.dydownloader.util.ShareUrls;
 import java.io.IOException;
@@ -71,10 +69,6 @@ public final class DouyinDownloader {
   private final ABogusGenerator aBogusGenerator;
   private final String defaultCookie;
 
-  public DouyinDownloader() {
-    this("");
-  }
-
   public DouyinDownloader(String cookie) {
     this(defaultClient(), cookie);
   }
@@ -124,23 +118,23 @@ public final class DouyinDownloader {
     return extraParams;
   }
 
-  public AwemeProfile collectWorkInfo(String shareLink) throws DouyinDownloaderException {
+  public AwemeProfile collectWorkInfo(String shareLink) throws IOException {
     return collectWorkInfo(shareLink, this.defaultCookie);
   }
 
   public AwemeProfile collectWorkInfo(String shareLink, String cookie)
-      throws DouyinDownloaderException {
+      throws IOException {
     SingleAwemeContext context = resolveSingleAwemeContext(shareLink, cookie);
     return collectAwemeProfileFromNode(context.aweme(), context.awemeId());
   }
 
   public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink)
-      throws DouyinDownloaderException {
+      throws IOException {
     return collectAccountWorksInfo(accountShareLink, this.defaultCookie);
   }
 
   public List<AwemeProfile> collectAccountWorksInfo(String accountShareLink, String cookie)
-      throws DouyinDownloaderException {
+      throws IOException {
     ResolvedShareLink resolved = resolveShareLink(accountShareLink, cookie);
     String secUserId =
         resolveSecUserId(accountShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
@@ -148,19 +142,19 @@ public final class DouyinDownloader {
   }
 
   public List<AwemeProfile> collectMixWorksInfo(String mixShareLink)
-      throws DouyinDownloaderException {
+      throws IOException {
     return collectMixWorksInfo(mixShareLink, this.defaultCookie);
   }
 
   public List<AwemeProfile> collectMixWorksInfo(String mixShareLink, String cookie)
-      throws DouyinDownloaderException {
+      throws IOException {
     ResolvedShareLink resolved = resolveShareLink(mixShareLink, cookie);
     String mixId = resolveMixId(mixShareLink, resolved.resolvedUrl(), resolved.normalizedCookie());
     return collectAwemeProfileList(fetchMixAwemeList(mixId, resolved.normalizedCookie()));
   }
 
   private SingleAwemeContext resolveSingleAwemeContext(String shareLink, String cookie)
-      throws DouyinDownloaderException {
+      throws IOException {
     if (shareLink == null || shareLink.trim().isEmpty()) {
       throw new IllegalArgumentException("shareLink is blank");
     }
@@ -194,7 +188,7 @@ public final class DouyinDownloader {
   }
 
   private List<AwemeProfile> collectAwemeProfileList(List<JsonNode> awemeList)
-      throws DouyinDownloaderException {
+      throws IOException {
     List<AwemeProfile> results = new ArrayList<>(awemeList.size());
     for (JsonNode aweme : awemeList) {
       String awemeId = aweme.path("aweme_id").asText("").trim();
@@ -204,13 +198,13 @@ public final class DouyinDownloader {
   }
 
   private AwemeProfile collectAwemeProfileFromNode(JsonNode aweme, String fallbackAwemeId)
-      throws DouyinDownloaderException {
+      throws IOException {
     String awemeId = aweme.path("aweme_id").asText("").trim();
     if (awemeId.isEmpty()) {
       awemeId = fallbackAwemeId == null ? "" : fallbackAwemeId.trim();
     }
     if (awemeId.isEmpty()) {
-      throw new AwemeDetailFetchException("aweme_id is missing in aweme payload");
+      throw new IOException("aweme_id is missing in aweme payload");
     }
 
     MediaType mediaType = isImagePost(aweme) ? MediaType.IMAGE : MediaType.VIDEO;
@@ -239,6 +233,7 @@ public final class DouyinDownloader {
     String thumbnailUrl = thumbnailUrls.isEmpty() ? "" : thumbnailUrls.get(0);
 
     return new AwemeProfile(
+        Platform.DOUYIN,
         awemeId,
         mediaType,
         desc,
@@ -253,7 +248,7 @@ public final class DouyinDownloader {
   }
 
   private String resolveSecUserId(String sourceText, String resolvedUrl, String cookie)
-      throws WorkListFetchException {
+      throws IOException {
     Optional<String> secUserId = extractSecUserId(resolvedUrl);
     if (secUserId.isEmpty()) secUserId = extractSecUserId(sourceText);
     // Only attempt to scrape sec_user_id from HTML when the link itself looks like an account link.
@@ -272,11 +267,11 @@ public final class DouyinDownloader {
         .map(String::trim)
         .filter(s -> !s.isEmpty())
         .orElseThrow(
-            () -> new WorkListFetchException("Cannot extract sec_user_id from account share link"));
+            () -> new IOException("Cannot extract sec_user_id from account share link"));
   }
 
   private String resolveMixId(String sourceText, String resolvedUrl, String cookie)
-      throws DouyinDownloaderException {
+      throws IOException {
     Optional<String> mixId = extractMixId(resolvedUrl);
     if (mixId.isEmpty()) mixId = extractMixId(sourceText);
     if (mixId.isEmpty()) mixId = fetchMixIdFromPage(resolvedUrl, cookie);
@@ -295,11 +290,11 @@ public final class DouyinDownloader {
       }
     }
 
-    throw new WorkListFetchException("Cannot extract mix_id from mix share link");
+    throw new IOException("Cannot extract mix_id from mix share link");
   }
 
   private List<JsonNode> fetchAccountAwemeList(String secUserId, String cookie)
-      throws WorkListFetchException {
+      throws IOException {
     long cursor = 0;
     boolean hasMore = true;
     int pageCount = 0;
@@ -321,7 +316,7 @@ public final class DouyinDownloader {
 
       JsonNode items = pageData.path("aweme_list");
       if (!items.isArray()) {
-        throw new WorkListFetchException("aweme_list is missing in account list response");
+        throw new IOException("aweme_list is missing in account list response");
       }
       int newItemCount = 0;
       for (JsonNode item : items) {
@@ -353,7 +348,7 @@ public final class DouyinDownloader {
   }
 
   private List<JsonNode> fetchMixAwemeList(String mixId, String cookie)
-      throws WorkListFetchException {
+      throws IOException {
     long cursor = 0;
     boolean hasMore = true;
     int pageCount = 0;
@@ -379,7 +374,7 @@ public final class DouyinDownloader {
 
       JsonNode items = pageData.path("aweme_list");
       if (!items.isArray()) {
-        throw new WorkListFetchException("aweme_list is missing in mix list response");
+        throw new IOException("aweme_list is missing in mix list response");
       }
       int newItemCount = 0;
       for (JsonNode item : items) {
@@ -411,7 +406,7 @@ public final class DouyinDownloader {
   }
 
   private JsonNode fetchPagedAwemeList(List<String> apiUrls, String cookie, String listType)
-      throws WorkListFetchException {
+      throws IOException {
     List<String> attempts = new ArrayList<>();
 
     for (String apiUrl : apiUrls) {
@@ -454,7 +449,7 @@ public final class DouyinDownloader {
       }
     }
 
-    throw new WorkListFetchException(
+    throw new IOException(
         "Cannot fetch "
             + listType
             + " work list. Tried "
@@ -483,7 +478,7 @@ public final class DouyinDownloader {
   }
 
   private JsonNode fetchAwemeDetail(String awemeId, String cookie)
-      throws AwemeDetailFetchException {
+      throws IOException {
     // Prefer the signed detail API, then fall back to the legacy iteminfo endpoint.
     String detailQuery = buildWebDetailQuery(awemeId, cookie);
     List<String> candidates =
@@ -525,7 +520,7 @@ public final class DouyinDownloader {
       }
     }
 
-    throw new AwemeDetailFetchException(
+    throw new IOException(
         "Cannot parse aweme detail for aweme_id="
             + awemeId
             + ". Tried "

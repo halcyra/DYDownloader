@@ -13,9 +13,7 @@ public final class ResourceScreenStore {
   private ResourceScreenStore() {}
 
   public static String put(List<ResourceItem> items) {
-    String screenKey = UUID.randomUUID().toString();
-    replace(screenKey, items);
-    return screenKey;
+    return replace(null, items);
   }
 
   public static String replace(String screenKey, List<ResourceItem> items) {

@@ -50,10 +50,6 @@ public final class AppPrefs {
     return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
   }
 
-  public static String getCookie(Context context) {
-    return getCookie(context, Platform.DOUYIN);
-  }
-
   public static String getCookie(Context context, Platform platform) {
     SharedPreferences sharedPreferences = prefs(context);
     String encryptedCookie = sharedPreferences.getString(encryptedCookieKey(platform), "");
@@ -83,10 +79,6 @@ public final class AppPrefs {
     return normalizedCookie;
   }
 
-  public static void setCookie(Context context, String cookie) {
-    setCookie(context, Platform.DOUYIN, cookie);
-  }
-
   public static void setCookie(Context context, Platform platform, String cookie) {
     SharedPreferences.Editor editor = prefs(context).edit();
     String normalizedCookie = normalizeCookie(cookie);
@@ -108,24 +100,12 @@ public final class AppPrefs {
         .apply();
   }
 
-  public static boolean hasConfiguredCookie(Context context) {
-    return hasConfiguredCookie(context, Platform.DOUYIN);
-  }
-
   public static boolean hasConfiguredCookie(Context context, Platform platform) {
     return isConfiguredCookieValue(platform, getCookie(context, platform));
   }
 
-  public static boolean hasAuthenticatedCookie(Context context) {
-    return hasAuthenticatedCookie(context, Platform.DOUYIN);
-  }
-
   public static boolean hasAuthenticatedCookie(Context context, Platform platform) {
     return hasAuthenticatedCookieValue(platform, getCookie(context, platform));
-  }
-
-  public static boolean isConfiguredCookieValue(String cookie) {
-    return isConfiguredCookieValue(Platform.DOUYIN, cookie);
   }
 
   public static boolean isConfiguredCookieValue(Platform platform, String cookie) {
@@ -136,10 +116,6 @@ public final class AppPrefs {
     boolean hasAuthField = hasAuthenticatedCookieValue(platform, normalizedCookie);
     boolean hasRequestField = hasAnyCookieField(normalizedCookie, cookieRequestFields(platform));
     return hasAuthField || hasRequestField;
-  }
-
-  public static boolean hasAuthenticatedCookieValue(String cookie) {
-    return hasAuthenticatedCookieValue(Platform.DOUYIN, cookie);
   }
 
   public static boolean hasAuthenticatedCookieValue(Platform platform, String cookie) {

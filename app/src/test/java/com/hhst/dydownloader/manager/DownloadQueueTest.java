@@ -203,21 +203,8 @@ public class DownloadQueueTest {
       Platform platform, String sourceKey, DownloadTask.Status status) {
     ResourceItem item =
         new ResourceItem(
-            platform,
-            null,
-            0L,
-            0,
-            "item",
-            CardType.ALBUM,
-            1L,
-            0,
-            true,
-            "",
-            null,
-            sourceKey,
-            List.of(),
-            false,
-            "");
+            platform, null, 0L, 0, "item", "", CardType.ALBUM, 1L, 0, true, "", null, sourceKey,
+            List.of(), false, "", "");
     DownloadTask task = new DownloadTask(item.key(), item, 1L);
     task.setStatus(status);
     return task;

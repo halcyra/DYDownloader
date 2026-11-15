@@ -3,7 +3,6 @@ package com.hhst.dydownloader.tiktok;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import okhttp3.OkHttpClient;
@@ -14,16 +13,6 @@ public final class TikTokDeviceIdResolver {
   private static final String EXPLORE_URL = "https://www.tiktok.com/explore";
   private static final Pattern DEVICE_ID_PATTERN = Pattern.compile("\"wid\":\"(\\d{19})\"");
   private final OkHttpClient httpClient;
-
-  public TikTokDeviceIdResolver() {
-    this(
-        new OkHttpClient.Builder()
-            .followRedirects(true)
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(12, TimeUnit.SECONDS)
-            .callTimeout(15, TimeUnit.SECONDS)
-            .build());
-  }
 
   public TikTokDeviceIdResolver(OkHttpClient httpClient) {
     this.httpClient = httpClient;

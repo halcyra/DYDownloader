@@ -138,18 +138,11 @@ final class DownloadStorage {
   }
 
   private String buildRelativePath(String relativeDir) {
-    if (relativeDir.isBlank()) {
-      return Environment.DIRECTORY_DOWNLOADS
-          + "/"
-          + StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME
-          + "/";
-    }
     return Environment.DIRECTORY_DOWNLOADS
         + "/"
         + StoragePathUtils.PUBLIC_DOWNLOADS_DIRECTORY_NAME
         + "/"
-        + relativeDir
-        + "/";
+        + (relativeDir.isBlank() ? "" : relativeDir + "/");
   }
 
   private void copy(InputStream input, OutputStream output) throws IOException {

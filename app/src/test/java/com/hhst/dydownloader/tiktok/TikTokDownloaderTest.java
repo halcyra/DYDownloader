@@ -2,6 +2,7 @@ package com.hhst.dydownloader.tiktok;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import com.hhst.dydownloader.douyin.AwemeProfile;
@@ -27,6 +28,32 @@ public class TikTokDownloaderTest {
   private static final String WORK_ITEM_ID = "7345678901234567890";
   private static final String WORK_PATH = "/@creator/video/" + WORK_ITEM_ID;
   private static final String SHORT_WORK_SHARE_URL = "https://vt.tiktok.com/ZSuXJ91x8/";
+
+  @Test
+  public void invalidPayloads_keepSpecificErrors() {
+    OkHttpClient client =
+        new OkHttpClient.Builder()
+            .addInterceptor(
+                chain -> {
+                  Request request = chain.request();
+                  String payload =
+                      "/explore".equals(request.url().encodedPath())
+                          ? "{\"wid\":\"7350000000000000000\"}"
+                          : "[]";
+                  return response(request, 200, "application/json", payload);
+                })
+            .build();
+    TikTokDownloader downloader = new TikTokDownloader(client, "msToken=base");
+
+    IOException detailError = assertThrows(IOException.class,
+        () -> downloader.collectWorkInfo("https://www.tiktok.com" + WORK_PATH));
+    assertEquals("TikTok item detail payload is empty", detailError.getMessage());
+
+    IOException listError = assertThrows(IOException.class,
+        () -> downloader.collectAccountWorksInfo(
+            "https://www.tiktok.com/@creator?secUid=MS4wLjABAAAAurl1234"));
+    assertEquals("TikTok account list payload is invalid", listError.getMessage());
+  }
 
   @Test
   public void trustedShareUrl_onlyAllowsTikTokHosts() {

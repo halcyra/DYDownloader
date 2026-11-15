@@ -57,18 +57,6 @@ public class ResourceEntity {
     this.status = "pending";
   }
 
-  @Ignore
-  public ResourceEntity(
-      long parentId,
-      int imageResId,
-      String text,
-      CardType type,
-      long createTime,
-      int childrenNum,
-      boolean isLeaf) {
-    this(Platform.DOUYIN, parentId, imageResId, text, type, createTime, childrenNum, isLeaf);
-  }
-
   public ResourceItem toResourceItem() {
     return new ResourceItem(
         platform,

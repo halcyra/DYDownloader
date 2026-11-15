@@ -22,8 +22,9 @@ public class DownloadLifecycleInstrumentedTest {
     try (ActivityScenario<MainActivity> first = ActivityScenario.launch(MainActivity.class)) {
       first.onActivity(activity -> {});
     }
-    ResourceItem item = new ResourceItem(CardType.VIDEO.getIconResId(),
-        "Lifecycle test", CardType.VIDEO, 0, true, null);
+    ResourceItem item = new ResourceItem(
+        null, null, 0L, CardType.VIDEO.getIconResId(), "Lifecycle test", "", CardType.VIDEO,
+        System.currentTimeMillis(), 0, true, "", null, "", List.of(), false, "", "");
     CountDownLatch processed = new CountDownLatch(1);
     DownloadQueue.Listener listener = tasks -> {
       for (DownloadTask task : tasks) {

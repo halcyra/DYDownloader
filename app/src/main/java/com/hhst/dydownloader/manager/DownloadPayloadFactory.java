@@ -37,7 +37,7 @@ final class DownloadPayloadFactory {
     String baseSourceKey = SourceKeyUtils.baseOf(item.sourceKey());
     List<MediaType> mediaTypes = inferMediaTypes(item, urls, imagePost);
 
-    if ((urls == null || urls.isEmpty()) && !baseSourceKey.isBlank()) {
+    if (urls.isEmpty() && !baseSourceKey.isBlank()) {
       profile = profileLoader.load(item.platform(), cookie, baseSourceKey);
       urls = profile.downloadUrls();
       imagePost =
@@ -46,28 +46,24 @@ final class DownloadPayloadFactory {
       mediaTypes = inferMediaTypes(profile, urls, imagePost);
 
       int imageIndex = SourceKeyUtils.imageLeafIndex(item.sourceKey());
-      if (imagePost && imageIndex >= 0 && urls != null && imageIndex < urls.size()) {
+      if (imagePost && imageIndex >= 0 && imageIndex < urls.size()) {
         urls = List.of(urls.get(imageIndex));
-        mediaTypes = List.of(mediaTypeAt(mediaTypes, imageIndex, true));
+        mediaTypes = List.of(mediaTypes.get(imageIndex));
       }
     }
 
-    if (urls == null || urls.isEmpty()) {
+    if (urls.isEmpty()) {
       throw new IOException("No downloadable URLs");
     }
 
-    mediaTypes = normalizeMediaTypes(mediaTypes, urls.size(), imagePost);
     List<String> coverUrls = resolveCoverUrls(item, profile, urls, imagePost);
     return new DownloadPayload(profile, urls, imagePost, mediaTypes, coverUrls);
   }
 
   private List<MediaType> inferMediaTypes(ResourceItem item, List<String> urls, boolean imagePost) {
-    if (urls == null || urls.isEmpty()) {
-      return List.of();
-    }
     List<MediaType> types = new ArrayList<>(urls.size());
-    int liveLeafIndex = SourceKeyUtils.liveIndex(item != null ? item.sourceKey() : null);
-    int photoLeafIndex = SourceKeyUtils.photoIndex(item != null ? item.sourceKey() : null);
+    int liveLeafIndex = SourceKeyUtils.liveIndex(item.sourceKey());
+    int photoLeafIndex = SourceKeyUtils.photoIndex(item.sourceKey());
     for (String url : urls) {
       if (!imagePost) {
         types.add(MediaType.VIDEO);
@@ -86,41 +82,15 @@ final class DownloadPayloadFactory {
 
   private List<MediaType> inferMediaTypes(
       AwemeProfile profile, List<String> urls, boolean imagePost) {
-    if (urls == null || urls.isEmpty()) {
-      return List.of();
-    }
     List<MediaType> types = new ArrayList<>(urls.size());
     for (int i = 0; i < urls.size(); i++) {
       if (imagePost) {
-        types.add(profile != null ? profile.mediaTypeAt(i) : MediaType.IMAGE);
+        types.add(profile.mediaTypeAt(i));
       } else {
         types.add(MediaType.VIDEO);
       }
     }
     return List.copyOf(types);
-  }
-
-  private List<MediaType> normalizeMediaTypes(
-      List<MediaType> mediaTypes, int urlCount, boolean imagePost) {
-    if (urlCount <= 0) {
-      return List.of();
-    }
-    List<MediaType> normalized = new ArrayList<>(urlCount);
-    for (int i = 0; i < urlCount; i++) {
-      normalized.add(mediaTypeAt(mediaTypes, i, imagePost));
-    }
-    return List.copyOf(normalized);
-  }
-
-  private MediaType mediaTypeAt(List<MediaType> mediaTypes, int index, boolean imagePost) {
-    if (mediaTypes == null || index < 0 || index >= mediaTypes.size()) {
-      return imagePost ? MediaType.IMAGE : MediaType.VIDEO;
-    }
-    MediaType type = mediaTypes.get(index);
-    if (type == null) {
-      return imagePost ? MediaType.IMAGE : MediaType.VIDEO;
-    }
-    return type;
   }
 
   private List<String> resolveCoverUrls(

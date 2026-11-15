@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">DYDownloader</string>
+    <string name="app_name" translatable="false">DYDownloader</string>
     <string name="action_filter">Filter</string>
     <string name="action_search">Search</string>
     <string name="action_sort">Sort</string>
@@ -23,14 +23,14 @@
     <string name="language">Language</string>
     <string name="download_subdirectories">Save in subfolders</string>
     <string name="download_subdirectories_summary_on">Download/DYDownloader/work folders</string>
-    <string name="download_subdirectories_summary_off">Download/DYDownloader</string>
+    <string name="download_subdirectories_summary_off" translatable="false">Download/DYDownloader</string>
     <string name="file_naming">File naming</string>
     <string name="file_naming_hint">Placeholders: {author} author, {desc} description, {date} date, {id} work ID</string>
     <string name="file_naming_template_hint">Template</string>
     <string name="clear_cache">Clear Cache</string>
-    <string name="cookies">Cookies</string>
+    <string name="cookies" translatable="false">Cookies</string>
     <string name="cookies_platform_douyin">Douyin</string>
-    <string name="cookies_platform_tiktok">TikTok</string>
+    <string name="cookies_platform_tiktok" translatable="false">TikTok</string>
     <string name="retry">Retry</string>
     <string name="dialog_batch_delete_title">Batch Delete</string>
     <string name="dialog_detail_title">Detail</string>
@@ -66,10 +66,10 @@
     <string name="download_child_photo">Photo %1$02d</string>
     <string name="download_child_cover">Cover</string>
     <string name="download_child_video">Video</string>
-    <string name="cache_size_initial">0 MB</string>
-    <string name="cache_size_bytes">%1$d B</string>
-    <string name="cache_size_kb">%1$.2f KB</string>
-    <string name="cache_size_mb">%1$.2f MB</string>
+    <string name="cache_size_initial" translatable="false">0 MB</string>
+    <string name="cache_size_bytes" translatable="false">%1$d B</string>
+    <string name="cache_size_kb" translatable="false">%1$.2f KB</string>
+    <string name="cache_size_mb" translatable="false">%1$.2f MB</string>
     <string name="search_text_hint">Search text</string>
     <string name="sort_newest">Time (Newest)</string>
     <string name="sort_oldest">Time (Oldest)</string>
@@ -81,7 +81,7 @@
     <string name="play_pause">Play or pause</string>
     <string name="rewind">Rewind 5 seconds</string>
     <string name="forward">Forward 5 seconds</string>
-    <string name="time_zero">00:00</string>
+    <string name="time_zero" translatable="false">00:00</string>
     <string name="resource_action_no_local_files">No local files available</string>
     <string name="resource_action_open_single_only">Open with is only available for a single local file</string>
     <string name="resource_action_no_app_found">No compatible app found</string>

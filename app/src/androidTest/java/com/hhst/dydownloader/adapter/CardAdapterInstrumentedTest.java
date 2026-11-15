@@ -34,9 +34,9 @@ public class CardAdapterInstrumentedTest {
         int authorBottomOffset = -1;
         for (String title : List.of("Short", "A long title that takes up both lines of this card")) {
           for (HomeCard.State state : List.of(HomeCard.State.DONE, HomeCard.State.FAILED)) {
-            ResourceItem item = new ResourceItem(null, null, 0L, CardType.VIDEO.getIconResId(),
-                title, "Creator", CardType.VIDEO, 1L, 0, true, "", null, "video", List.of(),
-                false, "", "");
+            ResourceItem item = new ResourceItem(
+                null, null, 0L, CardType.VIDEO.getIconResId(), title, "Creator", CardType.VIDEO, 1L,
+                0, true, "", null, "video", List.of(), false, "", "");
             adapter.submitList(List.of(new HomeCard(item, state, 0, "Download failed", 0)));
             adapter.onBindViewHolder(holder, 0);
             int width = Math.round(180 * context.getResources().getDisplayMetrics().density);
@@ -65,8 +65,9 @@ public class CardAdapterInstrumentedTest {
     InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
       ContextThemeWrapper context = new ContextThemeWrapper(
           InstrumentationRegistry.getInstrumentation().getTargetContext(), R.style.Theme_DYDownloader);
-      ResourceItem item = new ResourceItem(CardType.VIDEO.getIconResId(), "Video",
-          CardType.VIDEO, 0, true, null);
+      ResourceItem item = new ResourceItem(
+          null, null, 0L, CardType.VIDEO.getIconResId(), "Video", "", CardType.VIDEO,
+          System.currentTimeMillis(), 0, true, "", null, "", List.of(), false, "", "");
       DownloadTask task = new DownloadTask(item);
       task.setStatus(DownloadTask.Status.FAILED);
       task.setError("IOException: failed");

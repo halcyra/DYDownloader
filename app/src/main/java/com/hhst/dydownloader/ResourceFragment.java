@@ -935,24 +935,30 @@ public class ResourceFragment extends Fragment
     return createVideoItems(profile, parentTitle, storageDir);
   }
 
-  private ResourceItem createVideoItem(
-      AwemeProfile profile, String parentTitle, String storageDir) {
+  private ResourceItem createMediaItem(
+      AwemeProfile profile,
+      String title,
+      CardType type,
+      String thumbnailUrl,
+      String sourceKey,
+      List<String> downloadUrls,
+      String storageDir) {
     return new ResourceItem(
         profile.platform(),
         null,
         -1L,
-        CardType.VIDEO.getIconResId(),
-        parentTitle,
+        type.getIconResId(),
+        title,
         profile.authorNickname(),
-        CardType.VIDEO,
+        type,
         profile.createTime() * 1000L,
         0,
         true,
-        profile.thumbnailUrl(),
+        thumbnailUrl,
         null,
-        profile.awemeId() + "#video",
-        profile.downloadUrls(),
-        false,
+        sourceKey,
+        downloadUrls,
+        type == CardType.PHOTO,
         "",
         storageDir);
   }
@@ -960,29 +966,27 @@ public class ResourceFragment extends Fragment
   private List<ResourceItem> createVideoItems(
       AwemeProfile profile, String parentTitle, String storageDir) {
     List<ResourceItem> videoItems = new ArrayList<>(2);
-    if (profile.thumbnailUrl() != null && !profile.thumbnailUrl().isBlank()) {
+    if (!profile.thumbnailUrl().isBlank()) {
       videoItems.add(
-          new ResourceItem(
-              profile.platform(),
-              null,
-              -1L,
-              CardType.PHOTO.getIconResId(),
+          createMediaItem(
+              profile,
               getString(R.string.resource_video_cover_label, parentTitle),
-              profile.authorNickname(),
               CardType.PHOTO,
-              profile.createTime() * 1000L,
-              0,
-              true,
               profile.thumbnailUrl(),
-              null,
               profile.awemeId() + "#cover",
               List.of(profile.thumbnailUrl()),
-              true,
-              "",
               storageDir));
     }
-    if (profile.downloadUrls() != null && !profile.downloadUrls().isEmpty()) {
-      videoItems.add(createVideoItem(profile, parentTitle, storageDir));
+    if (!profile.downloadUrls().isEmpty()) {
+      videoItems.add(
+          createMediaItem(
+              profile,
+              parentTitle,
+              CardType.VIDEO,
+              profile.thumbnailUrl(),
+              profile.awemeId() + "#video",
+              profile.downloadUrls(),
+              storageDir));
     }
     return videoItems;
   }
@@ -999,83 +1003,53 @@ public class ResourceFragment extends Fragment
       String photoSourceKey = profile.awemeId() + "#photo:" + (i + 1);
       String liveSourceKey = profile.awemeId() + "#live:" + (i + 1);
 
-      java.util.List<String> downloadUrls = java.util.List.of();
+      List<String> downloadUrls = List.of();
       if (i < profile.downloadUrls().size()) {
         String url = profile.downloadUrls().get(i);
         if (url != null && !url.isBlank()) {
-          downloadUrls = java.util.List.of(url);
+          downloadUrls = List.of(url);
         }
       }
       if (downloadUrls.isEmpty() && thumbnailUrl != null && !thumbnailUrl.isBlank()) {
-        downloadUrls = java.util.List.of(thumbnailUrl);
+        downloadUrls = List.of(thumbnailUrl);
       }
 
       if (mediaType == MediaType.VIDEO) {
-        java.util.List<String> coverUrls = java.util.List.of();
+        List<String> coverUrls = List.of();
         if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
-          coverUrls = java.util.List.of(thumbnailUrl);
+          coverUrls = List.of(thumbnailUrl);
         }
 
         photoItems.add(
-            new ResourceItem(
-                profile.platform(),
-                null,
-                -1L,
-                CardType.PHOTO.getIconResId(),
+            createMediaItem(
+                profile,
                 getString(R.string.resource_video_cover_label, photoDesc),
-                profile.authorNickname(),
                 CardType.PHOTO,
-                profile.createTime() * 1000L,
-                0,
-                true,
                 thumbnailUrl,
-                null,
                 photoSourceKey,
                 coverUrls,
-                true,
-                "",
                 storageDir));
 
         photoItems.add(
-            new ResourceItem(
-                profile.platform(),
-                null,
-                -1L,
-                CardType.VIDEO.getIconResId(),
+            createMediaItem(
+                profile,
                 photoDesc,
-                profile.authorNickname(),
                 CardType.VIDEO,
-                profile.createTime() * 1000L,
-                0,
-                true,
                 thumbnailUrl,
-                null,
                 liveSourceKey,
                 downloadUrls,
-                false,
-                "",
                 storageDir));
         continue;
       }
 
       photoItems.add(
-          new ResourceItem(
-              profile.platform(),
-              null,
-              -1L,
-              CardType.PHOTO.getIconResId(),
+          createMediaItem(
+              profile,
               photoDesc,
-              profile.authorNickname(),
               CardType.PHOTO,
-              profile.createTime() * 1000L,
-              0,
-              true,
               thumbnailUrl,
-              null,
               photoSourceKey,
               downloadUrls,
-              true,
-              "",
               storageDir));
     }
     return photoItems;

@@ -14,17 +14,6 @@ public class HttpDownloader {
   private final OkHttpClient client;
   private final PlatformRequestContext requestContext;
 
-  public HttpDownloader(OkHttpClient client, String userAgent, String referer) {
-    this(client, userAgent, referer, "");
-  }
-
-  public HttpDownloader(OkHttpClient client, String userAgent, String referer, String cookie) {
-    this.client = client;
-    this.requestContext =
-        new PlatformRequestContext(
-            userAgent, referer, cookie, java.util.List.of("douyin.com", "iesdouyin.com"));
-  }
-
   public HttpDownloader(OkHttpClient client, PlatformRequestContext requestContext) {
     this.client = client;
     this.requestContext =
@@ -59,10 +48,6 @@ public class HttpDownloader {
       }
     }
     return true;
-  }
-
-  public File download(String url, File outputFile, ProgressCallback callback) throws IOException {
-    return download(url, outputFile, callback, null);
   }
 
   public File download(
@@ -135,7 +120,6 @@ public class HttpDownloader {
       }
     }
 
-    // Publish the completed temporary file.
     File tmpFile = new File(outputFile.getAbsolutePath() + ".part");
     if (!tmpFile.exists()) {
       throw new IOException("Download failed: temp file missing");

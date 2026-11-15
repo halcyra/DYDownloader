@@ -18,52 +18,19 @@ public class DownloadPayloadFactoryTest {
   public void build_imagePostUsesPhotoChildAsCoverForLiveAsset() throws Exception {
     ResourceItem liveCoverChild =
         new ResourceItem(
-            null,
-            1L,
-            CardType.PHOTO.getIconResId(),
-            "Photo 01 - Cover",
-            CardType.PHOTO,
-            1L,
-            0,
-            true,
-            "https://example.com/thumb.jpg",
-            null,
-            "aweme123#photo:1",
-            List.of("https://example.com/cover.jpg"),
-            true,
-            "");
+            null, null, 1L, CardType.PHOTO.getIconResId(), "Photo 01 - Cover", "", CardType.PHOTO,
+            1L, 0, true, "https://example.com/thumb.jpg", null, "aweme123#photo:1",
+            List.of("https://example.com/cover.jpg"), true, "", "");
     ResourceItem liveVideoChild =
         new ResourceItem(
-            null,
-            1L,
-            CardType.VIDEO.getIconResId(),
-            "Photo 01",
-            CardType.VIDEO,
-            1L,
-            0,
-            true,
-            "https://example.com/thumb.jpg",
-            null,
-            "aweme123#live:1",
-            List.of("https://example.com/live.mp4"),
-            false,
-            "");
+            null, null, 1L, CardType.VIDEO.getIconResId(), "Photo 01", "", CardType.VIDEO, 1L, 0,
+            true, "https://example.com/thumb.jpg", null, "aweme123#live:1",
+            List.of("https://example.com/live.mp4"), false, "", "");
     ResourceItem rootItem =
         new ResourceItem(
-            1L,
-            0L,
-            CardType.ALBUM.getIconResId(),
-            "Work",
-            CardType.ALBUM,
-            1L,
-            2,
-            false,
-            "https://example.com/root-thumb.jpg",
-            List.of(liveCoverChild, liveVideoChild),
-            "aweme123",
-            List.of("https://example.com/live.mp4"),
-            true,
-            "");
+            null, 1L, 0L, CardType.ALBUM.getIconResId(), "Work", "", CardType.ALBUM, 1L, 2, false,
+            "https://example.com/root-thumb.jpg", List.of(liveCoverChild, liveVideoChild),
+            "aweme123", List.of("https://example.com/live.mp4"), true, "", "");
 
     DownloadPayload payload = new DownloadPayloadFactory().build("", rootItem);
 
@@ -74,20 +41,9 @@ public class DownloadPayloadFactoryTest {
   public void build_videoUsesRootThumbnailAsCover() throws Exception {
     ResourceItem videoRoot =
         new ResourceItem(
-            1L,
-            0L,
-            CardType.ALBUM.getIconResId(),
-            "Video Work",
-            CardType.ALBUM,
-            1L,
-            1,
-            false,
-            "https://example.com/video-thumb.jpg",
-            null,
-            "aweme456",
-            List.of("https://example.com/video.mp4"),
-            false,
-            "");
+            null, 1L, 0L, CardType.ALBUM.getIconResId(), "Video Work", "", CardType.ALBUM, 1L, 1,
+            false, "https://example.com/video-thumb.jpg", null, "aweme456",
+            List.of("https://example.com/video.mp4"), false, "", "");
 
     DownloadPayload payload = new DownloadPayloadFactory().build("", videoRoot);
 
@@ -98,20 +54,9 @@ public class DownloadPayloadFactoryTest {
   public void build_liveLeafUsesThumbnailAsCover() throws Exception {
     ResourceItem liveLeaf =
         new ResourceItem(
-            null,
-            1L,
-            CardType.VIDEO.getIconResId(),
-            "Photo 01",
-            CardType.VIDEO,
-            1L,
-            0,
-            true,
-            "https://example.com/live-cover.jpg",
-            null,
-            "aweme789#live:1",
-            List.of("https://example.com/live.mp4"),
-            false,
-            "");
+            null, null, 1L, CardType.VIDEO.getIconResId(), "Photo 01", "", CardType.VIDEO, 1L, 0,
+            true, "https://example.com/live-cover.jpg", null, "aweme789#live:1",
+            List.of("https://example.com/live.mp4"), false, "", "");
 
     DownloadPayload payload = new DownloadPayloadFactory().build("", liveLeaf);
 
@@ -128,36 +73,16 @@ public class DownloadPayloadFactoryTest {
               requestedPlatform.set(platform);
               requestedSourceKey.set(sourceKey);
               return new AwemeProfile(
-                  Platform.TIKTOK,
-                  "7345678901234567890",
-                  MediaType.VIDEO,
-                  "TikTok work",
-                  1L,
-                  "creator",
-                  "secUid",
-                  "",
-                  "https://example.com/cover.jpg",
+                  Platform.TIKTOK, "7345678901234567890", MediaType.VIDEO, "TikTok work", 1L,
+                  "creator", "secUid", "", "https://example.com/cover.jpg",
                   List.of("https://example.com/cover.jpg"),
-                  List.of("https://example.com/video.mp4"),
-                  List.of());
+                  List.of("https://example.com/video.mp4"), List.of());
             });
     ResourceItem item =
         new ResourceItem(
-            Platform.TIKTOK,
-            1L,
-            0L,
-            CardType.ALBUM.getIconResId(),
-            "TikTok work",
-            CardType.ALBUM,
-            1L,
-            0,
-            false,
-            "https://example.com/cover.jpg",
-            null,
-            "7345678901234567890",
-            List.of(),
-            false,
-            "");
+            Platform.TIKTOK, 1L, 0L, CardType.ALBUM.getIconResId(), "TikTok work", "",
+            CardType.ALBUM, 1L, 0, false, "https://example.com/cover.jpg", null,
+            "7345678901234567890", List.of(), false, "", "");
 
     DownloadPayload payload = factory.build("cookie", item);
 

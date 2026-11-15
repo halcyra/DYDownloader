@@ -37,8 +37,6 @@ public class CookiesActivity extends AppCompatActivity {
         .setOnClickListener(v -> openCookieLogin(Platform.DOUYIN));
     findViewById(R.id.layoutTikTokCookies)
         .setOnClickListener(v -> openCookieLogin(Platform.TIKTOK));
-
-    updateCookieStatus();
   }
 
   @Override
