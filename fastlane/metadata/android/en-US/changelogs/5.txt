@@ -1,0 +1,1 @@
+Fixed downloads failing with "Invalid surrogate in string" for filenames containing emoji.

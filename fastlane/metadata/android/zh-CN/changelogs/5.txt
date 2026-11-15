@@ -1,0 +1,1 @@
+修复包含 Emoji 等字符的文件名导致下载失败（Invalid surrogate in string）的问题。
